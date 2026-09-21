@@ -43,9 +43,37 @@ class EncoderBlock(nn.Module):
 
         return x,skip
 
-class DecoderBlock:
-    pass
+class DecoderBlock(nn.Module):
+    def __init__(self,in_channels,out_channels):
+        super().__init__()
 
+        self.up=nn.ConvTranspose2d(
+            in_channels,
+            out_channels,
+            kernel_size=2,
+            stride=2
+        )
+
+        self.conv=DoubleConv(
+            out_channels*2,
+            out_channels
+        )
+
+    def forward(self,x,skip):
+        x=self.up(x)
+        diff_h=skip.size(2)-x.size(2)
+        diff_w=skip.size(3)-x.size(3)
+
+        skip=skip[
+            :,
+            :,
+            diff_h//2:diff_h//2+x.size(2),
+            diff_w//2:diff_w//2+x.size(3)
+        ]
+
+        x=torch.cat([x,skip],dim=1)
+        x=self.conv(x)
+        return x
 class UNet(nn.Module):
     def __init__(self):
         super().__init__()
@@ -71,12 +99,16 @@ class UNet(nn.Module):
 
 
 if __name__ == "__main__":
-    x=torch.randn(1,1,572,572)
+    x=torch.randn(1,1024,28,28)
+    skip=torch.randn(1,512,64,64)
+    block=DecoderBlock(1024,512)
+    y=block(x,skip)
+    print(y.shape)
     #model=DoubleConv(1,64)
 
     #y=model(x)
-    block=EncoderBlock(1,64)
-    x,skip=block(x)
+    #block=EncoderBlock(1,64)
+    #x,skip=block(x)
     # print(x.shape)
     # print(skip.shape)
 
