@@ -46,8 +46,26 @@ class EncoderBlock(nn.Module):
 class DecoderBlock:
     pass
 
-class UNet:
-    pass
+class UNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.enc1=EncoderBlock(1,64)
+        self.enc2=EncoderBlock(64,128)
+        self.enc3=EncoderBlock(128,256)
+        self.enc4=EncoderBlock(256,512)
+
+        self.bottleneck=DoubleConv(512,1024)
+
+
+    def forward(self,x):
+        #保存的不是 Pool 后的东西，而是 Pool 前的 skip
+        x1,skip1=self.enc1(x)
+        x2,skip2=self.enc2(x1)
+        x3,skip3=self.enc3(x2)
+        x4,skip4=self.enc4(x3)
+
+        x=self.bottleneck(x4)
 
 
 
@@ -59,5 +77,6 @@ if __name__ == "__main__":
     #y=model(x)
     block=EncoderBlock(1,64)
     x,skip=block(x)
-    print(x.shape)
-    print(skip.shape)
+    # print(x.shape)
+    # print(skip.shape)
+
