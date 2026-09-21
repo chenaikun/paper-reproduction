@@ -78,6 +78,7 @@ class UNet(nn.Module):
     def __init__(self):
         super().__init__()
 
+        #Encoder部分的搭建
         self.enc1=EncoderBlock(1,64)
         self.enc2=EncoderBlock(64,128)
         self.enc3=EncoderBlock(128,256)
@@ -85,6 +86,13 @@ class UNet(nn.Module):
 
         self.bottleneck=DoubleConv(512,1024)
 
+        #进行Decoder部分的搭建
+        self.dec1=DecoderBlock(1024,512)
+        self.dec2=DecoderBlock(512,256)
+        self.dec3=DecoderBlock(256,128)
+        self.dec4=DecoderBlock(128,64)
+
+        self.final=nn.Conv2d(64,2,kernel_size=1)
 
     def forward(self,x):
         #保存的不是 Pool 后的东西，而是 Pool 前的 skip
@@ -95,15 +103,22 @@ class UNet(nn.Module):
 
         x=self.bottleneck(x4)
 
+        x=self.dec1(x,skip4)
+        x=self.dec2(x,skip3)
+        x=self.dec3(x,skip2)
+        x=self.dec4(x,skip1)
 
+        x=self.final(x)
+
+        return x
 
 
 if __name__ == "__main__":
-    x=torch.randn(1,1024,28,28)
-    skip=torch.randn(1,512,64,64)
-    block=DecoderBlock(1024,512)
-    y=block(x,skip)
-    print(y.shape)
+    # x=torch.randn(1,1024,28,28)
+    # skip=torch.randn(1,512,64,64)
+    # block=DecoderBlock(1024,512)
+    # y=block(x,skip)
+    # print(y.shape)
     #model=DoubleConv(1,64)
 
     #y=model(x)
@@ -111,4 +126,9 @@ if __name__ == "__main__":
     #x,skip=block(x)
     # print(x.shape)
     # print(skip.shape)
+    model=UNet()
+    x=torch.randn(1,1,572,572)
+    y=model(x)
 
+    print(f"input:{x.shape}")
+    print(f"output:{y.shape}")
