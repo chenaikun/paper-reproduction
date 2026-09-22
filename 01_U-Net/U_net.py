@@ -13,6 +13,7 @@ class DoubleConv(nn.Module):
                 kernel_size=3,
                 padding=0
             ),
+            nn.BatchNorm2d(out_channels),
             nn.ReLU(),
             nn.Conv2d(
                 out_channels,
@@ -20,6 +21,7 @@ class DoubleConv(nn.Module):
                 kernel_size=3,
                 padding=0
             ),
+            nn.BatchNorm2d(out_channels),
             nn.ReLU()
         )
 
