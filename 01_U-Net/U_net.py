@@ -130,5 +130,5 @@ if __name__ == "__main__":
     x=torch.randn(1,1,572,572)
     y=model(x)
 
-    print(f"input:{x.shape}")
-    print(f"output:{y.shape}")
+    # print(f"input:{x.shape}")
+    # print(f"output:{y.shape}")
