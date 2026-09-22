@@ -1,0 +1,14 @@
+# 训练输出（runs 目录）
+runs/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# Conda/虚拟环境
+env/
+venv/
+.conda/
+
+
+data/
