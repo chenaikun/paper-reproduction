@@ -19,10 +19,12 @@ def train():
 
     model=UNet().to(device)
 
-    criterion=nn.CrossEntropyLoss()
+    # criterion=nn.CrossEntropyLoss()
 
+    class_weights=torch.tensor([1.0,5.0]).to(device)
+    criterion=nn.CrossEntropyLoss(weight=class_weights)
     #使用经典的Adam优化器
-    optimizer=optim.Adam(model.parameters(),lr=1e-4)
+    optimizer=optim.Adam(model.parameters(),lr=5e-4)
 
     num_epochs=30
 
