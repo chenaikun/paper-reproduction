@@ -46,7 +46,7 @@ def train():
             loss.backward()#反向传播
 
             total_loss+=loss.item()
-
+            optimizer.step()
         avg_loss=total_loss/len(dataloader)
         print(f"Epoch [{epoch+1:02d}/{num_epochs:02d}]-平均损失：{avg_loss:.4f}")
 
