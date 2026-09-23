@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from U_net import UNet
+from losses import CombinedLoss
 
 def train():
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -21,12 +22,13 @@ def train():
 
     # criterion=nn.CrossEntropyLoss()
 
-    class_weights=torch.tensor([1.0,5.0]).to(device)
-    criterion=nn.CrossEntropyLoss(weight=class_weights)
+    #class_weights=torch.tensor([1.0,5.0]).to(device)
+    #criterion=nn.CrossEntropyLoss(weight=class_weights)
+    criterion = CombinedLoss()
     #使用经典的Adam优化器
     optimizer=optim.Adam(model.parameters(),lr=5e-4)
 
-    num_epochs=30
+    num_epochs=60
 
     print(">>> 开始训练...")
 
