@@ -3,3 +3,9 @@ baseline:
 全集平均指标:
 Mean IoU : 86.31%
 Mean Dice: 92.09%
+
+
+Original Architecture + SGD + CE
+全集平均指标:
+Mean IoU : 67.89%
+Mean Dice: 80.00%

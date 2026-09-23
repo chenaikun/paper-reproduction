@@ -1,6 +1,6 @@
 import os
 
-from dataset import HeLaDataset
+from dataset_baseline import HeLaDataset
 
 
 import torch

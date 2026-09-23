@@ -3,8 +3,8 @@ import numpy as np
 import torch
 import torchvision.transforms.functional as TF
 from torch.utils.data import DataLoader
-from dataset import HeLaDataset
-from U_net import UNet
+from dataset_original import HeLaDataset
+from U_net_original import UNet
 
 def calculate_metrics(pred_mask, true_mask, smooth=1e-6):
     """
@@ -40,7 +40,7 @@ def evaluate():
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
     model = UNet().to(device)
-    model.load_state_dict(torch.load("unet_cell_train_augmentation_dice.pth", map_location=device))
+    model.load_state_dict(torch.load("./results/original/unet_cell_OriginalArchitecture_SGD_CE.pth", map_location=device))
     model.eval()
 
     iou_list = []

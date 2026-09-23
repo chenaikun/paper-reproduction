@@ -1,6 +1,6 @@
 import os
 
-from dataset import HeLaDataset
+from dataset_original import HeLaDataset
 
 
 import torch
@@ -8,14 +8,14 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from U_net_original import UNet
-from losses_Dice import CombinedLoss
+#from losses_Dice import CombinedLoss
 
 def train():
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"当前使用的训练设备是：{device}")
 
     dataset=HeLaDataset(data_root="./data/DIC-C2DH-HeLa",target_size=324)
-    dataloader=DataLoader(dataset,batch_size=2,shuffle=True)
+    dataloader=DataLoader(dataset,batch_size=1,shuffle=True)  #和原论文保持一致
 
 
     model=UNet().to(device)
@@ -24,9 +24,9 @@ def train():
 
     #class_weights=torch.tensor([1.0,5.0]).to(device)
     #criterion=nn.CrossEntropyLoss(weight=class_weights)
-    criterion = CombinedLoss()
-    #使用经典的Adam优化器
-    optimizer=optim.Adam(model.parameters(),lr=5e-4)
+    #criterion = CombinedLoss()
+    criterion = nn.CrossEntropyLoss()
+    optimizer=optim.SGD(model.parameters(),lr=0.01,momentum=0.99) #原论文里面动量 0.99 ，未给出lr,一般设置0.01
 
     num_epochs=60
 
