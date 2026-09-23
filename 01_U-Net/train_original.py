@@ -7,8 +7,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from U_net import UNet
-from losses import CombinedLoss
+from U_net_original import UNet
+from losses_Dice import CombinedLoss
 
 def train():
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")

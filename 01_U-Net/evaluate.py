@@ -35,12 +35,12 @@ def evaluate():
 
     # 1. 载入数据集与模型
     data_root = "./data/DIC-C2DH-HeLa"
-    dataset = HeLaDataset(data_root=data_root, target_size=324)
+    dataset = HeLaDataset(data_root=data_root, target_size=324,is_train=False)
     # batch_size=1 逐张精确统计
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
     model = UNet().to(device)
-    model.load_state_dict(torch.load("unet_cell.pth", map_location=device))
+    model.load_state_dict(torch.load("unet_cell_train_augmentation_dice.pth", map_location=device))
     model.eval()
 
     iou_list = []

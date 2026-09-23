@@ -1,0 +1,5 @@
+baseline: 
+
+全集平均指标:
+Mean IoU : 86.31%
+Mean Dice: 92.09%
