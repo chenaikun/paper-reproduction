@@ -40,7 +40,7 @@ def evaluate():
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
     model = UNet().to(device)
-    model.load_state_dict(torch.load("./results/original/unet_cell_OriginalArchitecture_SGD_CE.pth", map_location=device))
+    model.load_state_dict(torch.load("./results/original_weighted/unet_original_weighted_ce.pth", map_location=device))
     model.eval()
 
     iou_list = []
