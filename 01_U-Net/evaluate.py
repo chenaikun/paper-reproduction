@@ -49,7 +49,8 @@ def evaluate():
     print(f">>> 开始评估共有 {len(dataset)} 张样本的数据集...")
 
     with torch.no_grad():
-        for idx, (images, masks) in enumerate(dataloader):
+        for idx, (images, masks, instance_masks) in enumerate(dataloader):
+        #for idx, (images, masks) in enumerate(dataloader):
             images = images.to(device)
             masks = masks.to(device)
 
