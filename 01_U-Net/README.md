@@ -14,23 +14,48 @@
 
 ## 3. 实验结果对比 (Ablation Study)
 
+### 3.1 受控消融:从 Baseline 逐步逼近论文原方案 (2026-09)
+
+统一流水线(Seq01 训练 / Seq02 跨序列验证,每步只改一个变量)定位出:
+**旧 Original 实验的 67.89% 是全前景退化解;根因是无 BatchNorm 的架构在 9 帧小数据上不可训练,
+与优化器/损失无关**(SGD/Adam、高低学习率共 5 种配置全部坍缩)。
+
+| Step | 配置变化 | 最佳 val IoU | 状态 |
+| :--- | :--- | :---: | :--- |
+| 0 | Baseline: BN + Adam + CE+Dice + flip/rot | **87.25%** | 正常(起点) |
+| 1 | 去 Dice 损失 | **88.56%** | 正常,Dice 非必要 |
+| 2 | Adam → SGD (0.01/0.99) | 86.61% | 正常,SGD 可稳定训练 |
+| 3 | CE → Weighted CE (w_c + 边界权重) | 84.41% | 正常,略降 |
+| 4 | 去 BatchNorm(纯论文架构) | 73.52%* | ⚠️ 全前景退化 |
+| 5 | + 弹性变形(论文完整增强) | 73.52%* | ⚠️ 退化,弹性变形救不回 |
+| 6–10 | 无BN 补救对照:降lr / 降动量 / 换Adam | 73.5~74.3%* | ⚠️ 全部退化 |
+
+\* 73.52% 为全前景平凡解在 Seq02 上的本底 IoU,无分割能力。
+
+完整表格与分析见 [ABLATION_RESULTS.md](ABLATION_RESULTS.md)。
+
+### 3.2 早期结果(全集内评估,含训练集,仅供历史参考)
+
 | 实验配置 | 训练轮数 | Mean IoU | Mean Dice | 表现分析 |
 | :--- | :---: | :---: | :---: | :--- |
 | Baseline (未增强) | 60 | 93.56% | 96.67% | 存在对特定位置和噪点的过拟合记忆 |
-| **+ Data Augmentation (推荐)** | 60 | **86.57%** | **92.42%** | 轮廓更具生物平滑性，具备旋转不变性与更强泛化力 |
+| **+ Data Augmentation (推荐)** | 60 | **86.57%** | **92.42%** | 轮廓更具生物平滑性,具备旋转不变性与更强泛化力 |
 
-*注：原论文 2015 年在未知测试集上的盲测 Mean IoU 为 77.56%。*
+*注:原论文 2015 年在未知测试集上的盲测 Mean IoU 为 77.56%;早期指标在训练全集上评估,偏高。*
 
 ## 4. 可视化效果
 ![Result Comparison](result_comparison.png)
 
 ## 5. 快速复现
 ```bash
-# 1. 训练模型
-python train.py
+# 1. 受控消融实验 (统一流水线,推荐)
+bash run_ablation.sh
 
-# 2. 模型定量评估
-python evaluate.py
+# 2. 单项实验训练
+python train_ablation.py --name my_exp --model baseline --optimizer adam --loss ce_dice
 
-# 3. 结果对比可视化
+# 3. 模型定量评估
+python evaluate.py --experiment baseline
+
+# 4. 结果对比可视化
 python predict.py
