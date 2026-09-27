@@ -6,6 +6,24 @@
 - **数据集**：ISBI Cell Tracking Challenge - `DIC-C2DH-HeLa`
 - **特点**：单通道显微镜灰度图像（512x512），稀疏人工标注（共 18 组有效样本）
 
+## 1.5 项目结构
+```
+01_U-Net/
+├── U_net_original.py      # 论文原架构（无 BatchNorm，valid conv）
+├── U_net_baseline.py      # 原架构 + BatchNorm（主力模型）
+├── U_net_no_skip.py       # 有 BN、去跳跃连接（对照）
+├── dataset_unified.py     # 统一数据集：train/val 划分 + instance mask + 弹性变形
+├── losses_Dice.py         # CE + Dice 组合损失
+├── losses_original.py     # 论文加权 CE（w_c 类别平衡 + 边界距离权重）
+├── train_ablation.py      # 统一消融训练脚本（模型/优化器/损失全部参数化）
+├── run_ablation.sh        # 一键跑全部消融步骤（step0~step10）
+├── evaluate.py            # 统一评估（按实验名自动加载对应架构与 checkpoint）
+├── predict.py             # 单张图预测可视化（原图/GT/预测三联图）
+├── ABLATION_RESULTS.md    # 消融实验完整结果与分析
+├── diagnosis.html         # 诊断报告：旧 Original 模型退化为全前景的证据
+└── results/               # 各实验 checkpoint（不入库）与逐 epoch 日志
+```
+
 ## 2. 实验设置与改进策略
 - **网络架构**：遵循 U-Net 编码-解码结构与跳跃连接，在 DoubleConv 中引入 `BatchNorm2d` 保证深层梯度的顺畅传播。
 - **空间对齐**：使用原版无填充卷积（Valid Conv），标签使用 `Center Crop` 裁剪至 324x324 与网络输出严格对齐。

@@ -9,7 +9,7 @@ from PIL import Image
 # 导入 PyTorch 相关库
 import torch
 import torchvision.transforms.functional as TF
-from U_net import UNet
+from U_net_baseline import UNet
 
 
 def predict_and_visualize():
@@ -18,7 +18,7 @@ def predict_and_visualize():
 
     # 2. 实例化模型结构并加载刚才训练好的权重
     model = UNet().to(device)
-    weights_path = "unet_cell.pth"
+    weights_path = "results/baseline/unet_cell_train_baseline.pth"
 
     # map_location 确保权重能正确加载到当前设备上
     model.load_state_dict(torch.load(weights_path, map_location=device))
