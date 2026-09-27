@@ -115,7 +115,7 @@ class UNet(nn.Module):
         return x
 
 
-if __name__ == "__main__":
+#if __name__ == "__main__":
     # x=torch.randn(1,1024,28,28)
     # skip=torch.randn(1,512,64,64)
     # block=DecoderBlock(1024,512)
@@ -128,9 +128,9 @@ if __name__ == "__main__":
     #x,skip=block(x)
     # print(x.shape)
     # print(skip.shape)
-    model=UNet()
-    x=torch.randn(1,1,572,572)
-    y=model(x)
-
+    # model=UNet()
+    # x=torch.randn(1,1,572,572)
+    # y=model(x)
+    #pass
     # print(f"input:{x.shape}")
     # print(f"output:{y.shape}")

@@ -3,8 +3,8 @@ import numpy as np
 import torch
 import torchvision.transforms.functional as TF
 from torch.utils.data import DataLoader
-from dataset_original import HeLaDataset
-from U_net_original import UNet
+from dataset_baseline import HeLaDataset
+from U_net_no_skip import UNetNoSkip
 
 def calculate_metrics(pred_mask, true_mask, smooth=1e-6):
     """
@@ -39,8 +39,8 @@ def evaluate():
     # batch_size=1 逐张精确统计
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
-    model = UNet().to(device)
-    model.load_state_dict(torch.load("./results/original_weighted/unet_original_weighted_ce.pth", map_location=device))
+    model = UNetNoSkip().to(device)
+    model.load_state_dict(torch.load("./results/baseline/unet_cell_train_baseline.pth", map_location=device))
     model.eval()
 
     iou_list = []
@@ -49,7 +49,7 @@ def evaluate():
     print(f">>> 开始评估共有 {len(dataset)} 张样本的数据集...")
 
     with torch.no_grad():
-        for idx, (images, masks, instance_masks) in enumerate(dataloader):
+        for idx, (images, masks) in enumerate(dataloader):
         #for idx, (images, masks) in enumerate(dataloader):
             images = images.to(device)
             masks = masks.to(device)
