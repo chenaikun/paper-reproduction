@@ -1,5 +1,5 @@
 from dataset_unmodified import UnmodifiedSegmentationDataset
-from U_net_baseline import UNet
+from U_net_original import UNet
 import torch
 from torch.utils.data import DataLoader
 import numpy as np
@@ -15,7 +15,7 @@ model = UNet().to(device)
 
 model.load_state_dict(
     torch.load(
-        "results/unmodified_baseline_adam_ce_60epoch/best_model.pth",
+        "results/unmodified_original_adam_ce_60epoch/best_model.pth",
         map_location=device,
     )
 )
