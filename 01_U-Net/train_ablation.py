@@ -36,6 +36,7 @@ DEFAULT_CONFIG = {
     "name": "step0_baseline_adam_ce_dice",
     "dataset": "hela",
     "data_root": "./data/DIC-C2DH-HeLa",
+    "init": "default",
     "model": "baseline",
     "optimizer": "adam",
     "loss": "ce_dice",
@@ -95,6 +96,25 @@ def build_optimizer(cfg, model):
         )
     else:
         raise ValueError(f"未知优化器: {cfg['optimizer']}")
+
+
+def initialize_model(model, init_type):
+    """Apply the requested convolution initialization before optimization."""
+    if init_type == "default":
+        return
+    if init_type != "he":
+        raise ValueError(f"未知初始化方式: {init_type}")
+
+    for module in model.modules():
+        if isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
+            # He/Kaiming normal initialization: std = sqrt(2 / fan_in).
+            nn.init.kaiming_normal_(
+                module.weight,
+                mode="fan_in",
+                nonlinearity="relu",
+            )
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
 
 #计算交并比
 def calculate_iou(pred_mask, true_mask, smooth=1e-6):
@@ -206,6 +226,7 @@ def train(cfg):
 
     # 构建模型
     model = build_model(cfg).to(device)
+    initialize_model(model, cfg["init"])
     criterion, criterion_needs_instance = build_criterion(cfg, device)
     optimizer = build_optimizer(cfg, model)
 
@@ -218,6 +239,7 @@ def train(cfg):
     print("=" * 60)
     print(f"实验: {cfg['name']}")
     print(f"数据集: {cfg['dataset']} ({cfg['data_root']})")
+    print(f"初始化: {cfg['init']}")
     print(f"模型: {cfg['model']} | 优化器: {cfg['optimizer']} | 损失: {cfg['loss']}")
     print(f"lr: {cfg['lr']} | epochs: {cfg['epochs']} | batch_size: {cfg['batch_size']}")
     print(f"弹性变形: {cfg['elastic_deform']} | 梯度裁剪: {cfg['grad_clip']}")
@@ -328,6 +350,7 @@ if __name__ == "__main__":
     parser.add_argument("--name", type=str, default=None)
     parser.add_argument("--dataset", type=str, default=None, choices=["hela", "unmodified"])
     parser.add_argument("--data-root", type=str, default=None)
+    parser.add_argument("--init", type=str, default=None, choices=["default", "he"])
     parser.add_argument("--model", type=str, default=None, choices=["baseline", "original", "no_skip"])
     parser.add_argument("--optimizer", type=str, default=None, choices=["adam", "sgd"])
     parser.add_argument("--loss", type=str, default=None, choices=["ce_dice", "ce", "weighted_ce"])
@@ -348,6 +371,7 @@ if __name__ == "__main__":
         "name": args.name,
         "dataset": args.dataset,
         "data_root": args.data_root,
+        "init": args.init,
         "model": args.model,
         "optimizer": args.optimizer,
         "loss": args.loss,
