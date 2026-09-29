@@ -1,0 +1,2 @@
+实验配置: {'name': 'unmodified_wiring_check', 'dataset': 'unmodified', 'data_root': './data/unmodified-data', 'model': 'baseline', 'optimizer': 'adam', 'loss': 'ce', 'lr': 0.0005, 'momentum': 0.99, 'w0': 10.0, 'sigma': 5.0, 'elastic_deform': False, 'epochs': 0, 'batch_size': 1, 'grad_clip': 0.0, 'seed': 42}
+

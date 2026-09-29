@@ -34,6 +34,8 @@ from torch.utils.data import DataLoader
 # ============================================================
 DEFAULT_CONFIG = {
     "name": "step0_baseline_adam_ce_dice",
+    "dataset": "hela",
+    "data_root": "./data/DIC-C2DH-HeLa",
     "model": "baseline",
     "optimizer": "adam",
     "loss": "ce_dice",
@@ -153,25 +155,47 @@ def train(cfg):
     # 确定是否需要 instance_mask
     needs_instance = cfg["loss"] == "weighted_ce"
 
-    # 构建数据集
-    from dataset_unified import HeLaDataset
+    # 构建数据集。默认仍使用旧 HeLa 数据；新数据通过 --dataset unmodified 选择。
+    if cfg["dataset"] == "hela":
+        from dataset_unified import HeLaDataset
 
-    train_dataset = HeLaDataset(
-        data_root="./data/DIC-C2DH-HeLa",
-        target_size=324,
-        is_train=True,
-        split="train",
-        return_instance_mask=needs_instance,
-        elastic_deform=cfg["elastic_deform"],
-    )
+        train_dataset = HeLaDataset(
+            data_root=cfg["data_root"],
+            target_size=324,
+            is_train=True,
+            split="train",
+            return_instance_mask=needs_instance,
+            elastic_deform=cfg["elastic_deform"],
+        )
+        val_dataset = HeLaDataset(
+            data_root=cfg["data_root"],
+            target_size=324,
+            is_train=False,
+            split="val",
+            return_instance_mask=needs_instance,
+        )
+    elif cfg["dataset"] == "unmodified":
+        if needs_instance:
+            raise ValueError(
+                "unmodified 数据集只有二值标签，暂不支持 weighted_ce；"
+                "请先使用 ce 或 ce_dice。"
+            )
+        from dataset_unmodified import UnmodifiedSegmentationDataset
 
-    val_dataset = HeLaDataset(
-        data_root="./data/DIC-C2DH-HeLa",
-        target_size=324,
-        is_train=False,
-        split="val",
-        return_instance_mask=needs_instance,
-    )
+        train_dataset = UnmodifiedSegmentationDataset(
+            data_root=cfg["data_root"],
+            split="train",
+            target_size=324,
+            seed=cfg["seed"],
+        )
+        val_dataset = UnmodifiedSegmentationDataset(
+            data_root=cfg["data_root"],
+            split="val",
+            target_size=324,
+            seed=cfg["seed"],
+        )
+    else:
+        raise ValueError(f"未知数据集: {cfg['dataset']}")
 
     train_loader = DataLoader(
         train_dataset, batch_size=cfg["batch_size"], shuffle=True
@@ -193,10 +217,11 @@ def train(cfg):
     # 打印配置
     print("=" * 60)
     print(f"实验: {cfg['name']}")
+    print(f"数据集: {cfg['dataset']} ({cfg['data_root']})")
     print(f"模型: {cfg['model']} | 优化器: {cfg['optimizer']} | 损失: {cfg['loss']}")
     print(f"lr: {cfg['lr']} | epochs: {cfg['epochs']} | batch_size: {cfg['batch_size']}")
     print(f"弹性变形: {cfg['elastic_deform']} | 梯度裁剪: {cfg['grad_clip']}")
-    print(f"训练集: {len(train_dataset)} 帧 (Seq01) | 验证集: {len(val_dataset)} 帧 (Seq02)")
+    print(f"训练集: {len(train_dataset)} 张 | 验证集: {len(val_dataset)} 张")
     print(f"设备: {device}")
     print("=" * 60)
 
@@ -301,6 +326,8 @@ def train(cfg):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="U-Net 消融训练")
     parser.add_argument("--name", type=str, default=None)
+    parser.add_argument("--dataset", type=str, default=None, choices=["hela", "unmodified"])
+    parser.add_argument("--data-root", type=str, default=None)
     parser.add_argument("--model", type=str, default=None, choices=["baseline", "original", "no_skip"])
     parser.add_argument("--optimizer", type=str, default=None, choices=["adam", "sgd"])
     parser.add_argument("--loss", type=str, default=None, choices=["ce_dice", "ce", "weighted_ce"])
@@ -319,6 +346,8 @@ if __name__ == "__main__":
     cfg = dict(DEFAULT_CONFIG)
     arg_map = {
         "name": args.name,
+        "dataset": args.dataset,
+        "data_root": args.data_root,
         "model": args.model,
         "optimizer": args.optimizer,
         "loss": args.loss,
