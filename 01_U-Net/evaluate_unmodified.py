@@ -1,5 +1,5 @@
 from dataset_unmodified import UnmodifiedSegmentationDataset
-from U_net_baseline import UNet
+from U_net_no_skip import UNetNoSkip
 import torch
 from torch.utils.data import DataLoader
 import numpy as np
@@ -11,11 +11,11 @@ dataset = UnmodifiedSegmentationDataset(
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = UNet().to(device)
+model = UNetNoSkip().to(device)
 
 model.load_state_dict(
     torch.load(
-        "results/unmodified_baseline_adam_ce_dice_60epoch/best_model.pth",
+        "results/unmodified_no_skip_adam_ce_60epoch/best_model.pth",
         map_location=device,
     )
 )
