@@ -51,7 +51,7 @@ DEFAULT_CONFIG = {
 }
 # ============================================================
 
-
+#工厂模式
 def build_model(cfg):
     """根据配置构建模型"""
     if cfg["model"] == "baseline":
@@ -66,7 +66,7 @@ def build_model(cfg):
     else:
         raise ValueError(f"未知模型: {cfg['model']}")
 
-
+#工厂模式
 def build_criterion(cfg, device):
     """根据配置构建损失函数"""
     if cfg["loss"] == "ce_dice":
@@ -82,7 +82,7 @@ def build_criterion(cfg, device):
     else:
         raise ValueError(f"未知损失: {cfg['loss']}")
 
-
+#工厂模式
 def build_optimizer(cfg, model):
     """根据配置构建优化器"""
     if cfg["optimizer"] == "adam":
@@ -96,7 +96,7 @@ def build_optimizer(cfg, model):
     else:
         raise ValueError(f"未知优化器: {cfg['optimizer']}")
 
-
+#计算交并比
 def calculate_iou(pred_mask, true_mask, smooth=1e-6):
     """计算单样本 IoU"""
     pred = pred_mask.view(-1).bool()
