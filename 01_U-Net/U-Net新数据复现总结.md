@@ -97,9 +97,9 @@ predict_unmodified.py
 | 论文组件 | 论文作用 | 当前项目状态 |
 |---|---|---|
 | 边界加权损失 `w(x)` | 提高相邻目标之间边界像素的权重，减少粘连 | HeLa 代码中已有 `WeightedCrossEntropyLoss`；新数据只有二值标签，无法可靠计算每个实例的 `d1`、`d2`，因此未用于新数据实验 |
-| SGD + momentum `0.99` | 论文训练使用的优化器配置 | `train_ablation.py` 支持 SGD，但新数据主实验为了控制变量统一使用 Adam；因此尚未完成新数据上的论文 SGD 对照 |
+| SGD + momentum `0.99` | 论文训练使用的优化器配置 | `train_ablation.py` 支持 SGD；新数据上已完成 `lr=0.01`、`momentum=0.99` 的对照 |
 | 权重初始化 `std=sqrt(2/N)` | U-Net 采用的 He/Kaiming 初始化，`N` 为一个神经元的输入连接数 | `train_ablation.py` 已支持 `--init he`，并已完成新数据上的单因素对照 |
-| 弹性变形 | 用平滑随机位移扩充医学图像训练样本 | HeLa 数据加载器已有一个简化版本，但图像也使用了整数索引采样，并非论文描述的连续插值方案；新数据主实验只使用翻转和旋转 |
+| 弹性变形 | 用平滑随机位移扩充医学图像训练样本 | 新数据读取器现已支持平滑随机位移、图像双线性插值和标签最近邻插值；正式训练对照尚未完成 |
 
 论文初始化可以写成：对卷积层权重从均值为 0、标准差为 `sqrt(2/N)` 的高斯分布采样，其中 `N` 是该层一个输出神经元的输入连接数。这是 U-Net 采用的 He/Kaiming 初始化方法，不是 U-Net 论文独创的方法。它与 BatchNorm 不是同一个机制，不能用 BatchNorm 实验结果替代。
 
@@ -142,6 +142,7 @@ batch size：1
 |---|:---:|:---:|---|---:|---:|---:|---:|
 | Baseline | 有 | 有 | CE | 90.30% | 86.09% ± 4.28% | 92.46% ± 2.59% | 0.8119 |
 | Baseline + He init | 有 | 有 | CE | 90.12% | **86.77% ± 3.73%** | **92.87% ± 2.21%** | **0.7888** |
+| Baseline + SGD | 有 | 有 | CE | 90.08% | 85.27% ± 4.85% | 91.97% ± 2.96% | 0.8295 |
 | Original | 无 | 有 | CE | 89.23% | 85.62% ± 4.16% | 92.20% ± 2.49% | 0.8104 |
 | Baseline | 有 | 有 | CE+Dice | 90.31% | 86.48% ± 4.08% | 92.70% ± 2.47% | 0.7980 |
 | No-skip | 有 | 无 | CE | 88.24% | 85.32% ± 4.88% | 92.00% ± 2.97% | 0.8200 |
@@ -204,7 +205,18 @@ Baseline + CE 的测试 IoU 为 `86.09%`，Baseline + CE+Dice 为 `86.48%`，提
 
 He 初始化的最佳验证 IoU 略低 `0.18` 个百分点，但测试 IoU 提高 `0.68` 个百分点，测试 Dice 提高 `0.41` 个百分点，预测前景率也降低。这说明初始化可能改善了测试集泛化和过预测情况，但当前只有一个随机种子，不能据此断言 He 初始化必然优于默认初始化。
 
-### 6.5 预测结果中的过预测
+### 6.5 SGD 优化器的作用
+
+在 Baseline、默认初始化、CE 和数据划分保持一致的条件下，将 Adam 换成论文风格的 SGD（`lr=0.01`、`momentum=0.99`）后：
+
+| 优化器 | 最佳验证 IoU | 测试 Mean IoU | 测试 Mean Dice | 测试前景率 |
+|---|---:|---:|---:|---:|
+| Adam | 90.30% | 86.09% ± 4.28% | 92.46% ± 2.59% | 0.8119 |
+| SGD, momentum=0.99 | 90.08% | 85.27% ± 4.85% | 91.97% ± 2.96% | 0.8295 |
+
+SGD 的最佳验证 IoU 与 Adam 接近，仅低 `0.22` 个百分点，但测试 IoU 低 `0.82` 个百分点，测试 Dice 低 `0.49` 个百分点，前景率更高。这说明在当前单次固定划分和学习率配置下，SGD 的训练集/验证集表现尚可，但泛化略差，并且前景过预测更明显。由于 Adam 与 SGD 的学习率尺度不同，这一结果不能单独证明 Adam 在所有配置下都优于 SGD。
+
+### 6.6 预测结果中的过预测
 
 部分测试图中，预测前景率高于真实前景率。例如某些样本的真实前景率约为 `0.60`，预测前景率约为 `0.83`。这说明当前模型的主要误差是前景过预测，而不是全前景坍缩。
 
@@ -319,6 +331,46 @@ python train_ablation.py \
 
 这条命令可以说明项目支持论文加权损失和 SGD 配置，但它的结果属于旧 HeLa 实验，不能和新数据的 30 张测试图结果放在同一张表中。
 
+### 8.7 新数据上的弹性增强对照
+
+新数据读取器现在支持 `--elastic-deform`。先运行 5 个 epoch 检查训练是否稳定：
+
+```bash
+python train_ablation.py \
+  --name unmodified_baseline_elastic_smoke_5epoch \
+  --dataset unmodified \
+  --data-root ./data/unmodified-data \
+  --model baseline \
+  --optimizer adam \
+  --loss ce \
+  --lr 5e-4 \
+  --init default \
+  --elastic-deform \
+  --epochs 5 \
+  --batch-size 1 \
+  --seed 42
+```
+
+确认没有尺寸错误、标签仍为二值且前景率没有长期退化后，再运行 60 epoch 正式实验：
+
+```bash
+python train_ablation.py \
+  --name unmodified_baseline_elastic_ce_60epoch \
+  --dataset unmodified \
+  --data-root ./data/unmodified-data \
+  --model baseline \
+  --optimizer adam \
+  --loss ce \
+  --lr 5e-4 \
+  --init default \
+  --elastic-deform \
+  --epochs 60 \
+  --batch-size 1 \
+  --seed 42
+```
+
+这组实验只增加弹性变形，其他配置与 `unmodified_baseline_adam_ce_60epoch` 保持一致。
+
 ### 8.6 新数据上的初始化对照
 
 训练脚本现在支持：
@@ -414,7 +466,7 @@ python train_ablation.py \
 
 ## 11. 最终结论
 
-在下载得到的 30/30 数据集上，U-Net Baseline 能够稳定完成二分类分割。在当前已经完成的对照中，Baseline + He/Kaiming 初始化 + CE 取得最佳测试表现：`86.77%` Mean IoU 和 `92.87%` Mean Dice；Baseline + CE+Dice 也取得了接近的 `86.48%` Mean IoU 和 `92.70%` Mean Dice。
+在下载得到的 30/30 数据集上，U-Net Baseline 能够稳定完成二分类分割。在当前已经完成的对照中，Baseline + He/Kaiming 初始化 + CE 取得最佳测试表现：`86.77%` Mean IoU 和 `92.87%` Mean Dice；Baseline + CE+Dice 也取得了接近的 `86.48%` Mean IoU 和 `92.70%` Mean Dice。SGD 在论文风格配置下能够正常收敛，但本次测试集结果低于 Adam。
 
 消融实验表明：
 

@@ -15,7 +15,7 @@ model = UNet().to(device)
 
 model.load_state_dict(
     torch.load(
-        "results/unmodified_baseline_he_init_ce_60epoch/best_model.pth",
+        "results/unmodified_baseline_sgd_ce_60epoch/best_model.pth",
         map_location=device,
     )
 )

@@ -207,6 +207,7 @@ def train(cfg):
             split="train",
             target_size=324,
             seed=cfg["seed"],
+            elastic_deform=cfg["elastic_deform"],
         )
         val_dataset = UnmodifiedSegmentationDataset(
             data_root=cfg["data_root"],

@@ -1,0 +1,7 @@
+实验配置: {'name': 'unmodified_baseline_sgd_smoke_5epoch', 'dataset': 'unmodified', 'data_root': './data/unmodified-data', 'init': 'default', 'model': 'baseline', 'optimizer': 'sgd', 'loss': 'ce', 'lr': 0.01, 'momentum': 0.99, 'w0': 10.0, 'sigma': 5.0, 'elastic_deform': False, 'epochs': 5, 'batch_size': 1, 'grad_clip': 0.0, 'seed': 42}
+
+Epoch [01/05] - loss: 0.4539 - val_IoU: 75.90% - val_Dice: 86.28% - fg_ratio: 0.9683 ⚠️ 退化！ - best_IoU: 75.90% (5.0s)
+Epoch [02/05] - loss: 0.3468 - val_IoU: 79.74% - val_Dice: 88.70% - fg_ratio: 0.8455 - best_IoU: 79.74% (4.7s)
+Epoch [03/05] - loss: 0.3176 - val_IoU: 83.71% - val_Dice: 91.12% - fg_ratio: 0.7957 - best_IoU: 83.71% (4.9s)
+Epoch [04/05] - loss: 0.2956 - val_IoU: 84.33% - val_Dice: 91.49% - fg_ratio: 0.8234 - best_IoU: 84.33% (4.8s)
+Epoch [05/05] - loss: 0.2789 - val_IoU: 86.11% - val_Dice: 92.53% - fg_ratio: 0.7940 - best_IoU: 86.11% (4.8s)

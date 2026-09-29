@@ -16,6 +16,7 @@ import random
 
 import numpy as np
 from PIL import Image
+from scipy.ndimage import gaussian_filter, map_coordinates
 
 import torch
 import torchvision.transforms.functional as TF
@@ -38,6 +39,7 @@ class UnmodifiedSegmentationDataset(Dataset):
         target_size=324,
         val_fraction=0.2,
         seed=42,
+        elastic_deform=False,
     ):
         if split not in {"train", "val", "test"}:
             raise ValueError("split must be 'train', 'val', or 'test'")
@@ -48,6 +50,7 @@ class UnmodifiedSegmentationDataset(Dataset):
         self.split = split
         self.target_size = target_size
         self.is_train = split == "train"
+        self.elastic_deform = elastic_deform and self.is_train
 
         source_split = "test" if split == "test" else "train"
         image_dir = self.data_root / source_split / "imgs"
@@ -103,6 +106,9 @@ class UnmodifiedSegmentationDataset(Dataset):
                     interpolation=TF.InterpolationMode.NEAREST,
                 )
 
+            if self.elastic_deform and random.random() > 0.5:
+                image, mask = self._elastic_transform(image, mask)
+
         image_array = np.asarray(image, dtype=np.float32) / 255.0
         mask_array = (np.asarray(mask, dtype=np.uint8) > 0).astype(np.int64)
 
@@ -113,3 +119,34 @@ class UnmodifiedSegmentationDataset(Dataset):
         )
 
         return image_tensor, mask_tensor.long()
+
+    @staticmethod
+    def _elastic_transform(image, mask, alpha=40.0, sigma=6.0):
+        """Apply one smooth random displacement field to image and mask."""
+        image_array = np.asarray(image, dtype=np.float32)
+        mask_array = np.asarray(mask, dtype=np.uint8)
+        height, width = image_array.shape
+
+        random_x = np.random.rand(height, width) * 2.0 - 1.0
+        random_y = np.random.rand(height, width) * 2.0 - 1.0
+        displacement_x = gaussian_filter(random_x, sigma=sigma) * alpha
+        displacement_y = gaussian_filter(random_y, sigma=sigma) * alpha
+
+        grid_y, grid_x = np.meshgrid(
+            np.arange(height), np.arange(width), indexing="ij"
+        )
+        sample_y = np.clip(grid_y + displacement_y, 0, height - 1)
+        sample_x = np.clip(grid_x + displacement_x, 0, width - 1)
+
+        coordinates = [sample_y, sample_x]
+        transformed_image = map_coordinates(
+            image_array, coordinates, order=1, mode="nearest"
+        )
+        transformed_mask = map_coordinates(
+            mask_array, coordinates, order=0, mode="nearest"
+        )
+
+        return (
+            Image.fromarray(np.clip(transformed_image, 0, 255).astype(np.uint8)),
+            Image.fromarray(transformed_mask.astype(np.uint8)),
+        )
