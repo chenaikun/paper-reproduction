@@ -1,0 +1,7 @@
+实验配置: {'name': 'unmodified_baseline_elastic_smoke_5epoch', 'dataset': 'unmodified', 'data_root': './data/unmodified-data', 'init': 'default', 'model': 'baseline', 'optimizer': 'adam', 'loss': 'ce', 'lr': 0.0005, 'momentum': 0.99, 'w0': 10.0, 'sigma': 5.0, 'elastic_deform': True, 'epochs': 5, 'batch_size': 1, 'grad_clip': 0.0, 'seed': 42}
+
+Epoch [01/05] - loss: 0.4997 - val_IoU: 78.55% - val_Dice: 87.96% - fg_ratio: 0.9384 - best_IoU: 78.55% (5.6s)
+Epoch [02/05] - loss: 0.3345 - val_IoU: 85.32% - val_Dice: 92.05% - fg_ratio: 0.8363 - best_IoU: 85.32% (5.3s)
+Epoch [03/05] - loss: 0.2967 - val_IoU: 86.29% - val_Dice: 92.63% - fg_ratio: 0.8121 - best_IoU: 86.29% (5.3s)
+Epoch [04/05] - loss: 0.2684 - val_IoU: 85.50% - val_Dice: 92.17% - fg_ratio: 0.8337 - best_IoU: 86.29% (5.3s)
+Epoch [05/05] - loss: 0.2505 - val_IoU: 87.19% - val_Dice: 93.14% - fg_ratio: 0.8099 - best_IoU: 87.19% (5.3s)
