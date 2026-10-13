@@ -16,3 +16,5 @@ data/
 *.pth
 # 运行日志
 *.log
+
+2020_neurips_gfl/mmdetection/
