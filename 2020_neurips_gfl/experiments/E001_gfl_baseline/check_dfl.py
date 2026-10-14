@@ -1,8 +1,13 @@
 import torch
 import torch.nn.functional as F
 
-pred = torch.zeros(1,5,requires_grad=True)
-
+#pred = torch.zeros(1,5,requires_grad=True)
+model = torch.nn.Linear(1,5,bias=False)
+torch.nn.init.zeros_(model.weight)
+x=torch.tensor([[1.0]])
+optimizer=torch.optim.SGD(model.parameters(),lr=0.1)
+pred=model(x)
+pred.retain_grad()
 #真实距离
 label = torch.tensor([2.8])
 
@@ -38,18 +43,24 @@ print(f"DFL: {loss_left+loss_right}")
 
 
 #执行反向传播
+optimizer.zero_grad()
 loss_dfl.mean().backward()
 print(f"logits的梯度：{pred.grad}")
+print(f"网络权重的梯度：{model.weight.grad}")
 
 
 
 
 #手动更新，测试损失是否下降
-lr=0.1
+# lr=0.1
 
+# with torch.no_grad():
+#     pred-=lr*pred.grad
+optimizer.step()
 with torch.no_grad():
-    pred-=lr*pred.grad
+    new_pred=model(x)
+    new_probs=F.softmax(new_pred,dim=1)
 
-
-print(f"更新后的logits:{pred}")
-print(f"更新后的概率：{F.softmax(pred,dim=1)}")
+print(f"更新后的权重:{model.weight.detach()}")
+print(f"重新计算的logits:{new_pred}")
+print(f"重新计算的概率：{new_probs}")
