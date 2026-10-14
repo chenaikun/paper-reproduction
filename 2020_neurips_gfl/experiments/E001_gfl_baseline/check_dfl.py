@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-pred = torch.zeros(1,5)
+pred = torch.zeros(1,5,requires_grad=True)
 
 #真实距离
 label = torch.tensor([2.8])
@@ -23,6 +23,9 @@ loss_left=ce_left*weight_left
 
 ce_right=F.cross_entropy(pred,dis_right,reduction="none")
 loss_right=ce_right*weigth_right
+
+#总损失
+loss_dfl = loss_left+loss_right
 print(f"左交叉熵：{ce_left}")
 print(f"左加权损失：{loss_left}")
 
@@ -31,3 +34,22 @@ print(f"右加权损失：{loss_right}")
 
 
 print(f"DFL: {loss_left+loss_right}")
+
+
+
+#执行反向传播
+loss_dfl.mean().backward()
+print(f"logits的梯度：{pred.grad}")
+
+
+
+
+#手动更新，测试损失是否下降
+lr=0.1
+
+with torch.no_grad():
+    pred-=lr*pred.grad
+
+
+print(f"更新后的logits:{pred}")
+print(f"更新后的概率：{F.softmax(pred,dim=1)}")
