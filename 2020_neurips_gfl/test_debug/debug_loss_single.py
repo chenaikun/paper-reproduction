@@ -79,15 +79,19 @@ def run_debug():
     #数据展开
     cls_score_flat=cls_score.permute(0,2,3,1).reshape(-1,classes_nums)
     bbox_pred_flat=bbox_pred.permute(0,2,3,1).reshape(-1,(reg_max+1)*4)
+    
+
     #监督数据展开
     labels_flat=labels.reshape(-1)
     bbox_targets_flat=bbox_targets.reshape(-1,4)
+    anchors_flat=anchors.reshape(-1,4)
 
     #提取正样本
     pos_mask=(labels_flat>=0)&(labels_flat<classes_nums)
     pos_bbox_pred=bbox_pred_flat[pos_mask]
     pos_bbox_targets=bbox_targets_flat[pos_mask]
-
+    pos_anchors=anchors_flat[pos_mask]
+    pos_centers=pos_anchors[:,:2]/stride[0]
 
     #模拟计算DFL loss
     pred_list=pos_bbox_pred.reshape(-1,(reg_max+1))
