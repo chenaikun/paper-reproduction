@@ -1,3 +1,4 @@
+import argparse
 import sys
 from pathlib import Path
 import torch
@@ -74,8 +75,8 @@ avg_factor=max(int((labels<classes_nums).sum()),1)
 
 
 # ----------------- 3. 用纯 PyTorch 模拟 GFL 的三个损失 -----------------
-# 这些函数是教学用的最小实现，目的是把论文公式和 GFLHead 中的调用顺序串起来。
-# 它们不是要替换 MMDetection 的正式实现。
+# 这些函数是论文公式和 GFLHead 中的调用顺序。
+
 
 
 def integral_decode(bbox_logits):
@@ -165,13 +166,37 @@ def quality_focal_loss(logits, labels, quality, beta=2.0):
     return (loss.sum(dim=1) * label_weights.reshape(-1)).sum() / avg_factor
 
 
+# ----------------- 4. 调试输出和断点 -----------------
+def trace_print(enabled, title, message):
+    """只在 --trace 模式打印中间量，避免普通运行时输出过多。"""
+    if enabled:
+        print(f"\n[{title}]\n{message}")
+
+
+def pause_if_requested(enabled, title):
+    """在 --pdb 模式暂停，让你检查当前作用域中的局部变量。"""
+    if enabled:
+        print(f"\n即将暂停：{title}")
+        print("可输入 p 变量名 查看变量，输入 n 执行下一行，输入 c 继续。")
+        breakpoint()
+
+
 # 核心逻辑计算函数
-def run_debug():
+def run_debug(trace=False, pdb_mode=False):
     print(f"数据加载完毕！\n")
     print(f"anchors:{anchors.shape},cls_score:{cls_score.shape},bbox_pred:{bbox_pred.shape}\n")
     print(f"labels:{labels.shape},bbox_targets:{bbox_targets.shape},avg_factor:{avg_factor}\n")
 
-    #数据展开
+    trace_print(
+        trace,
+        "Step 0 / 输入和监督信息",
+        "N=2, H=W=4, 类别数=80, reg_max=16\n"
+        "每个位置：80 个分类 logits + 68 个回归 logits\n"
+        "正样本数量=" + str(int(pos_count := (labels < classes_nums).sum()))
+    )
+    pause_if_requested(pdb_mode, "Step 0：查看原始 cls_score、bbox_pred、labels")
+
+    # 数据展开：对应 GFLHead.loss_by_feat_single 中的 permute 和 reshape。
     cls_score_flat=cls_score.permute(0,2,3,1).reshape(-1,classes_nums)
     bbox_pred_flat=bbox_pred.permute(0,2,3,1).reshape(-1,(reg_max+1)*4)
     
@@ -188,9 +213,31 @@ def run_debug():
     pos_anchors=anchors_flat[pos_mask]
     pos_centers=pos_anchors[:,:2]/stride[0]
 
+    trace_print(
+        trace,
+        "Step 1 / 展平并提取正样本",
+        f"cls_score_flat: {tuple(cls_score_flat.shape)}\n"
+        f"bbox_pred_flat: {tuple(bbox_pred_flat.shape)}\n"
+        f"pos_mask 中正样本数量: {int(pos_mask.sum())}\n"
+        f"pos_bbox_pred: {tuple(pos_bbox_pred.shape)}\n"
+        f"pos_centers:\n{pos_centers.detach()}"
+    )
+    pause_if_requested(pdb_mode, "Step 1：查看展平后的预测和正样本")
+
     # 1) Integral：把每个正样本的 68 个回归 logits 解码成四条边距离。
     pos_bbox_pred_corners = integral_decode(pos_bbox_pred)
     print(f"\n预测四条边距离 shape: {pos_bbox_pred_corners.shape}")
+
+    first_distribution = F.softmax(
+        pos_bbox_pred[0, :reg_max + 1], dim=0).detach()
+    trace_print(
+        trace,
+        "Step 2 / Integral",
+        f"第一个正样本左边的17个概率之和: {first_distribution.sum().item():.6f}\n"
+        f"第一个正样本左边概率前5项: {first_distribution[:5]}\n"
+        f"预测四条边距离:\n{pos_bbox_pred_corners.detach()}"
+    )
+    pause_if_requested(pdb_mode, "Step 2：查看 softmax 概率和 Integral 结果")
 
     # 2) 根据四条边距离得到预测框；真实框也由真实距离目标解码得到。
     pos_decode_bbox_pred = distances_to_boxes(pos_centers, pos_bbox_pred_corners)
@@ -201,14 +248,38 @@ def run_debug():
         pos_decode_bbox_pred.detach(), pos_decode_bbox_targets)
     print(f"预测框与真实框 IoU: {quality.detach()}")
 
+    trace_print(
+        trace,
+        "Step 3 / 解码预测框并计算 IoU",
+        f"预测框 xyxy:\n{pos_decode_bbox_pred.detach()}\n"
+        f"真实框 xyxy:\n{pos_decode_bbox_targets.detach()}\n"
+        f"IoU（作为 QFL 正样本质量标签）: {quality.detach()}"
+    )
+    pause_if_requested(pdb_mode, "Step 3：查看预测框、真实框和 IoU")
+
     # 分类置信度作为 GIoU/DFL 的样本权重；detach 表示它不反向影响分类分支。
     weight_targets = cls_score_flat.detach().sigmoid().max(dim=1)[0][pos_mask]
+
+    trace_print(
+        trace,
+        "Step 4 / 样本权重",
+        f"weight_targets（正样本最大分类置信度）: {weight_targets}\n"
+        "该权重 detach，不会通过回归损失反向更新分类分支。"
+    )
 
     # 4) GIoU Loss：比较最终预测框和真实框，属于框级回归损失。
     loss_bbox_each = aligned_giou_loss(
         pos_decode_bbox_pred, pos_decode_bbox_targets)
     # MMDetection 在这里传 avg_factor=1.0，因此是加权和，不再除以权重和。
     loss_bbox = (loss_bbox_each * weight_targets).sum()
+
+    trace_print(
+        trace,
+        "Step 5 / GIoU Loss",
+        f"每个正样本的 GIoU Loss: {loss_bbox_each.detach()}\n"
+        f"加权后的 loss_bbox: {loss_bbox.item():.6f}"
+    )
+    pause_if_requested(pdb_mode, "Step 5：查看 GIoU Loss")
 
     # 5) DFL：监督四条边的离散概率分布。
     pred_list=pos_bbox_pred.reshape(-1,(reg_max+1))
@@ -227,10 +298,35 @@ def run_debug():
     # MMDetection 的 avg_factor=4.0，对四条边的损失做平均。
     loss_dfl=(dfl_each * edge_weights).sum() / 4.0
 
+    trace_print(
+        trace,
+        "Step 6 / DFL",
+        f"第一个边目标距离: {target_list[0].item():.4f}\n"
+        f"左右整数: {dis_left[0].item()}, {dis_right[0].item()}\n"
+        f"左右权重: {weight_left[0].item():.4f}, {weight_right[0].item():.4f}\n"
+        f"对应左右交叉熵: {loss_left[0].item():.6f}, {loss_right[0].item():.6f}\n"
+        f"DFL: {loss_dfl.item():.6f}"
+    )
+    pause_if_requested(pdb_mode, "Step 6：查看 DFL 的左右插值")
+
     # 6) QFL：分类分支的正样本目标是 IoU，负样本目标是0。
     quality_all = torch.zeros_like(labels_flat, dtype=cls_score_flat.dtype)
     quality_all[pos_mask] = quality
     loss_cls = quality_focal_loss(cls_score_flat, labels_flat, quality_all)
+
+    positive_indices = pos_mask.nonzero(as_tuple=False).squeeze(1)
+    positive_labels = labels_flat[positive_indices]
+    positive_probabilities = cls_score_flat.sigmoid()[
+        positive_indices, positive_labels]
+    trace_print(
+        trace,
+        "Step 7 / QFL",
+        f"正样本类别: {positive_labels}\n"
+        f"正样本类别预测概率: {positive_probabilities.detach()}\n"
+        f"正样本 IoU 质量标签: {quality.detach()}\n"
+        f"QFL: {loss_cls.item():.6f}"
+    )
+    pause_if_requested(pdb_mode, "Step 7：查看 QFL 的类别概率和 IoU 目标")
 
     # 配置中的三个 loss_weight：QFL=1，GIoU=2，DFL=0.25。
     total_loss = loss_cls + 2.0 * loss_bbox + 0.25 * loss_dfl
@@ -251,11 +347,21 @@ def run_debug():
     optimizer.step()
     print(f"cls_score[0] 更新: {old_cls_logit:.6f} -> {cls_score.detach().flatten()[0].item():.6f}")
     print(f"bbox_pred[0] 更新: {old_bbox_logit:.6f} -> {bbox_pred.detach().flatten()[0].item():.6f}")
+    pause_if_requested(pdb_mode, "Step 8：查看梯度和 optimizer.step() 后的参数")
     return total_loss
 
 
 if __name__ == '__main__':
-    run_debug()
+    parser = argparse.ArgumentParser(
+        description='逐步展示 GFL 的 Integral、QFL、GIoU 和 DFL 计算链路')
+    parser.add_argument(
+        '--trace', action='store_true',
+        help='打印每个阶段的关键张量、形状和中间结果')
+    parser.add_argument(
+        '--pdb', dest='pdb_mode', action='store_true',
+        help='在每个阶段进入 Python 调试器；输入 n 单步，c 继续，p 变量查看')
+    args = parser.parse_args()
+    run_debug(trace=args.trace, pdb_mode=args.pdb_mode)
 
 
 
