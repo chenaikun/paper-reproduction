@@ -3,6 +3,9 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 
+# 固定随机种子，便于汇报时重复运行并得到相同的随机预测值。
+torch.manual_seed(0)
+
 # ----------------- 1. 解决目录路径导入问题 -----------------
 # 获取当前脚本所在目录 (test_debug) 的上一级目录 (2020_neurips_gfl)
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -59,7 +62,7 @@ labels[0,0]=1   #第一张图的第1个点类别为1
 
 label_weights = torch.ones((N,anchors_num),dtype=torch.float32)
 
-#正样本回归目标
+# 正样本回归目标。这里直接使用特征图坐标单位，便于和中心点相减解码。
 bbox_targets=torch.zeros((N,anchors_num,4),dtype=torch.float32)
 bbox_targets[0,5]=torch.tensor([3.2, 5.1, 4.0, 2.5])
 bbox_targets[1,2]=torch.tensor([8.6, 2.3, 7.4, 6.1])
@@ -70,7 +73,99 @@ bbox_targets[0,0]=torch.tensor([4.5, 4.5, 3.0, 3.0])
 avg_factor=max(int((labels<classes_nums).sum()),1)
 
 
-#核心逻辑计算函数
+# ----------------- 3. 用纯 PyTorch 模拟 GFL 的三个损失 -----------------
+# 这些函数是教学用的最小实现，目的是把论文公式和 GFLHead 中的调用顺序串起来。
+# 它们不是要替换 MMDetection 的正式实现。
+
+
+def integral_decode(bbox_logits):
+    """Integral: 4 组 (reg_max + 1) 个 logits -> 4 条连续边距离。"""
+    # bbox_logits: [num_positive, 4 * 17]
+    distributions = bbox_logits.reshape(-1, reg_max + 1)
+    probabilities = F.softmax(distributions, dim=1)
+    project = torch.arange(
+        reg_max + 1, device=bbox_logits.device, dtype=bbox_logits.dtype)
+    distances = (probabilities * project).sum(dim=1)
+    return distances.reshape(-1, 4)
+
+
+def distances_to_boxes(centers, distances):
+    """把 [left, top, right, bottom] 距离解码为 xyxy 框。"""
+    left, top, right, bottom = distances.unbind(dim=1)
+    cx, cy = centers.unbind(dim=1)
+    return torch.stack([cx - left, cy - top, cx + right, cy + bottom], dim=1)
+
+
+def aligned_iou(boxes1, boxes2, eps=1e-7):
+    """计算一一对应的 IoU；第 i 个 boxes1 只和第 i 个 boxes2 比较。"""
+    inter_left = torch.maximum(boxes1[:, 0], boxes2[:, 0])
+    inter_top = torch.maximum(boxes1[:, 1], boxes2[:, 1])
+    inter_right = torch.minimum(boxes1[:, 2], boxes2[:, 2])
+    inter_bottom = torch.minimum(boxes1[:, 3], boxes2[:, 3])
+    inter_w = (inter_right - inter_left).clamp(min=0)
+    inter_h = (inter_bottom - inter_top).clamp(min=0)
+    inter_area = inter_w * inter_h
+
+    area1 = (boxes1[:, 2] - boxes1[:, 0]).clamp(min=0) * \
+        (boxes1[:, 3] - boxes1[:, 1]).clamp(min=0)
+    area2 = (boxes2[:, 2] - boxes2[:, 0]).clamp(min=0) * \
+        (boxes2[:, 3] - boxes2[:, 1]).clamp(min=0)
+    return inter_area / (area1 + area2 - inter_area).clamp(min=eps)
+
+
+def aligned_giou_loss(boxes1, boxes2, eps=1e-7):
+    """计算一一对应的 GIoU Loss = 1 - GIoU。"""
+    iou = aligned_iou(boxes1, boxes2, eps)
+
+    enc_left = torch.minimum(boxes1[:, 0], boxes2[:, 0])
+    enc_top = torch.minimum(boxes1[:, 1], boxes2[:, 1])
+    enc_right = torch.maximum(boxes1[:, 2], boxes2[:, 2])
+    enc_bottom = torch.maximum(boxes1[:, 3], boxes2[:, 3])
+    enc_area = (enc_right - enc_left).clamp(min=0) * \
+        (enc_bottom - enc_top).clamp(min=0)
+
+    # GIoU 中的 union_area 需要交集面积；这里重新计算交集，代码更直观。
+    inter_left = torch.maximum(boxes1[:, 0], boxes2[:, 0])
+    inter_top = torch.maximum(boxes1[:, 1], boxes2[:, 1])
+    inter_right = torch.minimum(boxes1[:, 2], boxes2[:, 2])
+    inter_bottom = torch.minimum(boxes1[:, 3], boxes2[:, 3])
+    inter_area = (inter_right - inter_left).clamp(min=0) * \
+        (inter_bottom - inter_top).clamp(min=0)
+    area1 = (boxes1[:, 2] - boxes1[:, 0]).clamp(min=0) * \
+        (boxes1[:, 3] - boxes1[:, 1]).clamp(min=0)
+    area2 = (boxes2[:, 2] - boxes2[:, 0]).clamp(min=0) * \
+        (boxes2[:, 3] - boxes2[:, 1]).clamp(min=0)
+    union_area = area1 + area2 - inter_area
+    giou = iou - (enc_area - union_area) / enc_area.clamp(min=eps)
+    return 1 - giou
+
+
+def quality_focal_loss(logits, labels, quality, beta=2.0):
+    """QFL 的最小实现：负样本质量为0，正样本真实类别质量为 IoU。"""
+    probabilities = logits.sigmoid()
+    zero_target = torch.zeros_like(logits)
+
+    # 先把所有位置当成背景，和 mmdet 的 quality_focal_loss 第 35-40 行一致。
+    loss = F.binary_cross_entropy_with_logits(
+        logits, zero_target, reduction='none') * probabilities.pow(beta)
+
+    positive = (labels >= 0) & (labels < classes_nums)
+    positive_indices = positive.nonzero(as_tuple=False).squeeze(1)
+    if positive_indices.numel() > 0:
+        positive_labels = labels[positive_indices]
+        quality_gap = quality[positive_indices] - probabilities[
+            positive_indices, positive_labels]
+        positive_loss = F.binary_cross_entropy_with_logits(
+            logits[positive_indices, positive_labels],
+            quality[positive_indices],
+            reduction='none') * quality_gap.abs().pow(beta)
+        loss[positive_indices, positive_labels] = positive_loss
+
+    # label_weights 和 avg_factor 对应 GFLHead 对 QFL 的加权与归一化。
+    return (loss.sum(dim=1) * label_weights.reshape(-1)).sum() / avg_factor
+
+
+# 核心逻辑计算函数
 def run_debug():
     print(f"数据加载完毕！\n")
     print(f"anchors:{anchors.shape},cls_score:{cls_score.shape},bbox_pred:{bbox_pred.shape}\n")
@@ -93,7 +188,29 @@ def run_debug():
     pos_anchors=anchors_flat[pos_mask]
     pos_centers=pos_anchors[:,:2]/stride[0]
 
-    #模拟计算DFL loss
+    # 1) Integral：把每个正样本的 68 个回归 logits 解码成四条边距离。
+    pos_bbox_pred_corners = integral_decode(pos_bbox_pred)
+    print(f"\n预测四条边距离 shape: {pos_bbox_pred_corners.shape}")
+
+    # 2) 根据四条边距离得到预测框；真实框也由真实距离目标解码得到。
+    pos_decode_bbox_pred = distances_to_boxes(pos_centers, pos_bbox_pred_corners)
+    pos_decode_bbox_targets = distances_to_boxes(pos_centers, pos_bbox_targets)
+
+    # 3) 计算预测框和真实框的 IoU。GFL 用它作为 QFL 正样本的质量标签。
+    quality = aligned_iou(
+        pos_decode_bbox_pred.detach(), pos_decode_bbox_targets)
+    print(f"预测框与真实框 IoU: {quality.detach()}")
+
+    # 分类置信度作为 GIoU/DFL 的样本权重；detach 表示它不反向影响分类分支。
+    weight_targets = cls_score_flat.detach().sigmoid().max(dim=1)[0][pos_mask]
+
+    # 4) GIoU Loss：比较最终预测框和真实框，属于框级回归损失。
+    loss_bbox_each = aligned_giou_loss(
+        pos_decode_bbox_pred, pos_decode_bbox_targets)
+    # MMDetection 在这里传 avg_factor=1.0，因此是加权和，不再除以权重和。
+    loss_bbox = (loss_bbox_each * weight_targets).sum()
+
+    # 5) DFL：监督四条边的离散概率分布。
     pred_list=pos_bbox_pred.reshape(-1,(reg_max+1))
     target_list=pos_bbox_targets.reshape(-1)
 
@@ -104,10 +221,37 @@ def run_debug():
 
     loss_left=F.cross_entropy(pred_list,dis_left,reduction='none')
     loss_right=F.cross_entropy(pred_list,dis_right,reduction='none')
-    loss_dfl=(loss_left*weight_left+loss_right*weight_right).sum()/avg_factor
+    # 一个正样本有四条边，因此每条边复制该样本的 weight_targets。
+    edge_weights = weight_targets[:, None].expand(-1, 4).reshape(-1)
+    dfl_each = loss_left * weight_left + loss_right * weight_right
+    # MMDetection 的 avg_factor=4.0，对四条边的损失做平均。
+    loss_dfl=(dfl_each * edge_weights).sum() / 4.0
 
-    print(f"计算成功 loss_dfl: {loss_dfl}")
-    return loss_dfl
+    # 6) QFL：分类分支的正样本目标是 IoU，负样本目标是0。
+    quality_all = torch.zeros_like(labels_flat, dtype=cls_score_flat.dtype)
+    quality_all[pos_mask] = quality
+    loss_cls = quality_focal_loss(cls_score_flat, labels_flat, quality_all)
+
+    # 配置中的三个 loss_weight：QFL=1，GIoU=2，DFL=0.25。
+    total_loss = loss_cls + 2.0 * loss_bbox + 0.25 * loss_dfl
+
+    print(f"loss_cls (QFL): {loss_cls.item():.6f}")
+    print(f"loss_bbox (GIoU): {loss_bbox.item():.6f}")
+    print(f"loss_dfl (DFL): {loss_dfl.item():.6f}")
+    print(f"total_loss: {total_loss.item():.6f}")
+
+    # 用于展示完整训练链路：三项损失汇总后反向传播，更新 cls_score/bbox_pred。
+    optimizer = torch.optim.SGD([cls_score, bbox_pred], lr=0.01)
+    old_cls_logit = cls_score.detach().flatten()[0].item()
+    old_bbox_logit = bbox_pred.detach().flatten()[0].item()
+    optimizer.zero_grad()
+    total_loss.backward()
+    print(f"cls_score 梯度均值: {cls_score.grad.abs().mean().item():.6e}")
+    print(f"bbox_pred 梯度均值: {bbox_pred.grad.abs().mean().item():.6e}")
+    optimizer.step()
+    print(f"cls_score[0] 更新: {old_cls_logit:.6f} -> {cls_score.detach().flatten()[0].item():.6f}")
+    print(f"bbox_pred[0] 更新: {old_bbox_logit:.6f} -> {bbox_pred.detach().flatten()[0].item():.6f}")
+    return total_loss
 
 
 if __name__ == '__main__':
