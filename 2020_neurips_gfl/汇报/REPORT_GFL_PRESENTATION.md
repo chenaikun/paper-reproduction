@@ -164,7 +164,7 @@ $$
 
 当前 GFL 配置每个位置只有一个 anchor，所以 A=1。注意：**当前 MMDetection 仍生成 anchor 给 ATSS 做样本分配，回归时取 anchor 的中心点作为距离参考。** 因而“没有多个宽高比模板的回归输出”不等于“代码里完全不存在 anchor”。
 
-正式代码在 [anchor_center](../../mmdetection/mmdet/models/dense_heads/gfl_head.py#L220) 中用：
+正式代码在 [anchor_center](../mmdetection/mmdet/models/dense_heads/gfl_head.py#L220) 中用：
 
     anchors_cx = (anchors[..., 2] + anchors[..., 0]) / 2
     anchors_cy = (anchors[..., 3] + anchors[..., 1]) / 2
@@ -206,9 +206,9 @@ $$
 
 每条边对应距离候选 0、1、…、16。这里单位是相应层的 stride，不是只能预测 0 到 16 个像素。
 
-目标距离也不是任意大都能被 0 到 16 夹住。实现会对目标距离做范围限制，例如 [bbox2distance](../../mmdetection/mmdet/structures/bbox/transforms.py#L206) 使用上界减 eps 的 clamp，避免右侧整数索引越界。这也是多层尺度、样本分配与距离范围要一起考虑的原因。
+目标距离也不是任意大都能被 0 到 16 夹住。实现会对目标距离做范围限制，例如 [bbox2distance](../mmdetection/mmdet/structures/bbox/transforms.py#L206) 使用上界减 eps 的 clamp，避免右侧整数索引越界。这也是多层尺度、样本分配与距离范围要一起考虑的原因。
 
-代码入口：[输出层定义](../../mmdetection/mmdet/models/dense_heads/gfl_head.py#L166)、[当前模型配置](../../mmdetection/configs/gfl/gfl_r50_fpn_1x_coco.py#L30)。
+代码入口：[输出层定义](../mmdetection/mmdet/models/dense_heads/gfl_head.py#L166)、[当前模型配置](../mmdetection/configs/gfl/gfl_r50_fpn_1x_coco.py#L30)。
 
 ## 6. Integral 和 DFL：一条边的完整计算（约 7 分钟）
 
@@ -240,7 +240,7 @@ $$
 \hat y=2\times0.2+3\times0.8=2.8.
 $$
 
-正式实现：[Integral.forward](../../mmdetection/mmdet/models/dense_heads/gfl_head.py#L42)。
+正式实现：[Integral.forward](../mmdetection/mmdet/models/dense_heads/gfl_head.py#L42)。
 
     x = F.softmax(x.reshape(-1, self.reg_max + 1), dim=1)
     x = F.linear(x, self.project.type_as(x)).reshape(-1, 4)
@@ -287,7 +287,7 @@ $$
 
 这两个权重来自标注距离，不是网络预测的概率。理想的 DFL 最优分布才是在这两个位置分配 0.2 和 0.8。
 
-正式实现：[distribution_focal_loss](../../mmdetection/mmdet/models/losses/gfocal_loss.py#L144)。
+正式实现：[distribution_focal_loss](../mmdetection/mmdet/models/losses/gfocal_loss.py#L144)。
 
     dis_left = label.long()
     dis_right = dis_left + 1
@@ -381,7 +381,7 @@ $$
 
 ### 7.3 IoU 标签从哪里来
 
-在 [GFLHead.loss_by_feat_single](../../mmdetection/mmdet/models/dense_heads/gfl_head.py#L288) 中：
+在 [GFLHead.loss_by_feat_single](../mmdetection/mmdet/models/dense_heads/gfl_head.py#L288) 中：
 
     pos_bbox_pred_corners = self.integral(pos_bbox_pred)
     pos_decode_bbox_pred = self.bbox_coder.decode(
@@ -400,7 +400,7 @@ detach 表示这里把当前 IoU 当作监督目标，不让 QFL 沿着“质量
 
 ### 7.4 正式 QFL 代码怎么读
 
-入口：[quality_focal_loss](../../mmdetection/mmdet/models/losses/gfocal_loss.py#L13)。
+入口：[quality_focal_loss](../mmdetection/mmdet/models/losses/gfocal_loss.py#L13)。
 
 先把所有位置、所有类别按目标 0 计算：
 
@@ -427,7 +427,7 @@ detach 表示这里把当前 IoU 当作监督目标，不让 QFL 沿着“质量
 
 GIoU loss 的逐框原始值就是 1-GIoU；配置中的 loss_bbox 还包含加权与归一化，所以日志中的 loss_bbox 不能简单等同于一个框的 1-IoU。
 
-代码：[giou_loss](../../mmdetection/mmdet/models/losses/iou_loss.py#L122)。GIoU 的几何例子见第 10 节。
+代码：[giou_loss](../mmdetection/mmdet/models/losses/iou_loss.py#L122)。GIoU 的几何例子见第 10 节。
 
 ### weight_targets 不是 IoU 标签
 
@@ -448,9 +448,9 @@ GIoU loss 的逐框原始值就是 1-GIoU；配置中的 loss_bbox 还包含加�
 
 ### 多层如何组织
 
-[loss_by_feat_single](../../mmdetection/mmdet/models/dense_heads/gfl_head.py#L233) 返回该层三项损失和回归权重和。
+[loss_by_feat_single](../mmdetection/mmdet/models/dense_heads/gfl_head.py#L233) 返回该层三项损失和回归权重和。
 
-[loss_by_feat](../../mmdetection/mmdet/models/dense_heads/gfl_head.py#L325) 用 multi_apply 对各 FPN 层分别计算，再对回归两项做跨层权重归一化，返回每种 loss 的列表。训练框架随后将各层损失汇总。
+[loss_by_feat](../mmdetection/mmdet/models/dense_heads/gfl_head.py#L325) 用 multi_apply 对各 FPN 层分别计算，再对回归两项做跨层权重归一化，返回每种 loss 的列表。训练框架随后将各层损失汇总。
 
 理解总目标可以写：
 
@@ -511,7 +511,7 @@ $$
 
 **ICCV 2017，Tsung-Yi Lin 等。**
 
-[论文](https://arxiv.org/abs/1708.02002) · [正式实现](../../mmdetection/mmdet/models/losses/focal_loss.py)
+[论文](https://arxiv.org/abs/1708.02002) · [正式实现](../mmdetection/mmdet/models/losses/focal_loss.py)
 
 #### 它想解决什么
 
@@ -544,7 +544,7 @@ FL 的二元目标是 0 或 1。GFL 要让真实类别的目标变成 IoU，例�
 
 **ICCV 2019，Zhi Tian 等。**
 
-[论文](https://arxiv.org/abs/1904.01355) · [代码入口](../../mmdetection/mmdet/models/dense_heads/fcos_head.py)
+[论文](https://arxiv.org/abs/1904.01355) · [代码入口](../mmdetection/mmdet/models/dense_heads/fcos_head.py)
 
 #### 它想解决什么
 
@@ -610,7 +610,7 @@ FCOS 帮助理解参考点和 l/t/r/b 表示；GFL 进一步把每个直接回�
 
 **CVPR 2020，Shifeng Zhang 等；简称 ATSS。**
 
-[论文](https://arxiv.org/abs/1912.02424) · [ATSSAssigner](../../mmdetection/mmdet/models/task_modules/assigners/atss_assigner.py)
+[论文](https://arxiv.org/abs/1912.02424) · [ATSSAssigner](../mmdetection/mmdet/models/task_modules/assigners/atss_assigner.py)
 
 #### 它想解决什么
 
@@ -712,7 +712,7 @@ variance voting 则在融合相邻框坐标时考虑定位方差与重叠关系�
 
 **CVPR 2019，Hamid Rezatofighi 等；简称 GIoU。**
 
-[论文](https://arxiv.org/abs/1902.09630) · [损失实现](../../mmdetection/mmdet/models/losses/iou_loss.py#L122)
+[论文](https://arxiv.org/abs/1902.09630) · [损失实现](../mmdetection/mmdet/models/losses/iou_loss.py#L122)
 
 #### 它想解决什么
 
@@ -783,10 +783,10 @@ DFL 监督四条边的分布；Integral 解码后的最终框仍由 GIoU 约束�
 
 正式实现另外打开：
 
-- [gfl_head.py](../../mmdetection/mmdet/models/dense_heads/gfl_head.py)。
-- [gfocal_loss.py](../../mmdetection/mmdet/models/losses/gfocal_loss.py)。
-- [distance_point_bbox_coder.py](../../mmdetection/mmdet/models/task_modules/coders/distance_point_bbox_coder.py)。
-- [bbox2distance](../../mmdetection/mmdet/structures/bbox/transforms.py#L206)。
+- [gfl_head.py](../mmdetection/mmdet/models/dense_heads/gfl_head.py)。
+- [gfocal_loss.py](../mmdetection/mmdet/models/losses/gfocal_loss.py)。
+- [distance_point_bbox_coder.py](../mmdetection/mmdet/models/task_modules/coders/distance_point_bbox_coder.py)。
+- [bbox2distance](../mmdetection/mmdet/structures/bbox/transforms.py#L206)。
 
 ### 11.2 VS Code 操作
 
@@ -802,13 +802,13 @@ DFL 监督四条边的分布；Integral 解码后的最终框仍由 GIoU 约束�
 
 如果不使用图形调试器，可在项目根目录运行：
 
-    python experiments/E001_gfl_baseline/debug_loss_single.py --trace
+    python 汇报/debug_loss_single.py --trace
 
 如果终端已经位于本汇报文件夹，直接运行 python debug_loss_single.py --trace 即可。
 
 交互断点模式：
 
-    python experiments/E001_gfl_baseline/debug_loss_single.py --trace --pdb
+    python 汇报/debug_loss_single.py --trace --pdb
 
 pdb 中输入 p 变量名 查看值，n 执行下一行，c 继续。命令要在装有 torch 的 DL 环境里运行。
 
@@ -865,15 +865,15 @@ backward 负责计算和累积梯度，step 负责更新优化器管理的参数
 
 | 论文或概念 | 代码入口 | 我需要说明的变量 |
 |---|---|---|
-| FL 公式（1） | [focal_loss.py](../../mmdetection/mmdet/models/losses/focal_loss.py) | 正确标签概率 p_t、调制系数 |
-| QFL 公式（2） | [quality_focal_loss](../../mmdetection/mmdet/models/losses/gfocal_loss.py#L13) | sigmoid 分数、IoU 目标 |
-| 期望公式（5） | [Integral.forward](../../mmdetection/mmdet/models/dense_heads/gfl_head.py#L42) | 17 概率、固定候选距离 |
-| DFL 公式（6） | [distribution_focal_loss](../../mmdetection/mmdet/models/losses/gfocal_loss.py#L144) | 左右整数、两个插值权重 |
+| FL 公式（1） | [focal_loss.py](../mmdetection/mmdet/models/losses/focal_loss.py) | 正确标签概率 p_t、调制系数 |
+| QFL 公式（2） | [quality_focal_loss](../mmdetection/mmdet/models/losses/gfocal_loss.py#L13) | sigmoid 分数、IoU 目标 |
+| 期望公式（5） | [Integral.forward](../mmdetection/mmdet/models/dense_heads/gfl_head.py#L42) | 17 概率、固定候选距离 |
+| DFL 公式（6） | [distribution_focal_loss](../mmdetection/mmdet/models/losses/gfocal_loss.py#L144) | 左右整数、两个插值权重 |
 | GFL 统一公式（7） | 论文中的统一解释 | QFL 和 DFL 的特例关系，无须找同名函数 |
-| 总损失公式（8） | [单层损失](../../mmdetection/mmdet/models/dense_heads/gfl_head.py#L233) 与 [多层组织](../../mmdetection/mmdet/models/dense_heads/gfl_head.py#L325) | 各项损失、正样本、权重和归一化 |
-| 点到四边距离 | [bbox2distance](../../mmdetection/mmdet/structures/bbox/transforms.py#L206) | 参考点和 xyxy 真实框 |
-| 四边距离到框 | [DistancePointBBoxCoder.decode](../../mmdetection/mmdet/models/task_modules/coders/distance_point_bbox_coder.py#L52) | 左上减、右下加 |
-| 推理 | [_predict_by_feat_single](../../mmdetection/mmdet/models/dense_heads/gfl_head.py#L394) | sigmoid 分数、Integral、stride、筛选和 NMS |
+| 总损失公式（8） | [单层损失](../mmdetection/mmdet/models/dense_heads/gfl_head.py#L233) 与 [多层组织](../mmdetection/mmdet/models/dense_heads/gfl_head.py#L325) | 各项损失、正样本、权重和归一化 |
+| 点到四边距离 | [bbox2distance](../mmdetection/mmdet/structures/bbox/transforms.py#L206) | 参考点和 xyxy 真实框 |
+| 四边距离到框 | [DistancePointBBoxCoder.decode](../mmdetection/mmdet/models/task_modules/coders/distance_point_bbox_coder.py#L52) | 左上减、右下加 |
+| 推理 | [_predict_by_feat_single](../mmdetection/mmdet/models/dense_heads/gfl_head.py#L394) | sigmoid 分数、Integral、stride、筛选和 NMS |
 
 这里的行号针对当前本地 MMDetection 版本。Markdown 中的相对链接可以打开文件；部分预览器不支持 #L 行号，打开后可以搜索函数名或用 Ctrl+G 跳行。
 

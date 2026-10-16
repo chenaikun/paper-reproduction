@@ -8,9 +8,9 @@ import torch.nn.functional as F
 torch.manual_seed(0)
 
 # ----------------- 1. 解决目录路径导入问题 -----------------
-# 当前脚本在 experiments/E001_gfl_baseline；向上两级找到项目目录。
+# 当前脚本在项目根目录的“汇报”文件夹；向上一级找到项目目录。
 CURRENT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = CURRENT_DIR.parents[1]
+PROJECT_ROOT = CURRENT_DIR.parent
 
 # 将根目录和 mmdetection 路径加入到 sys.path 中
 if str(PROJECT_ROOT) not in sys.path:

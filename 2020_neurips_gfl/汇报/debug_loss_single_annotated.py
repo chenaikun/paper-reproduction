@@ -40,11 +40,11 @@ import torch.nn.functional as F
 torch.manual_seed(0)
 
 # ----------------- 1. 解决目录路径导入问题 -----------------
-# 当前脚本位于 experiments/E001_gfl_baseline，需要向上两级寻找项目。
+# 当前脚本位于项目根目录的“汇报”文件夹，需要向上一级寻找项目。
 # __file__ 是当前脚本文件名；resolve() 得到绝对路径，parent 取得汇报文件夹。
 CURRENT_DIR = Path(__file__).resolve().parent
-# parents[0] 是 experiments，parents[1] 是 2020_neurips_gfl 项目目录。
-PROJECT_ROOT = CURRENT_DIR.parents[1]
+# parent 是 2020_neurips_gfl 项目目录。
+PROJECT_ROOT = CURRENT_DIR.parent
 
 # 将根目录和 mmdetection 路径加入到 sys.path 中
 # 检查项目路径是否已经在模块搜索列表里，避免重复插入。
