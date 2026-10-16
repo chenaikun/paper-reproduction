@@ -94,7 +94,7 @@ def draw_feature_panel(ax):
     ax.set_xlim(0, 8)
     ax.set_ylim(6, 0)
     ax.set_aspect("equal")
-    ax.set_title("② 下采样 8 倍后的局部特征图", fontsize=14, weight="bold", pad=12)
+    ax.set_title("② stride=8 的局部参考点网格（示意）", fontsize=14, weight="bold", pad=12)
 
     for x in range(9):
         ax.plot([x, x], [0, 6], color="#b7c3cc", linewidth=0.8)
@@ -112,7 +112,7 @@ def draw_feature_panel(ax):
     ax.annotate("参考点 (40.5,27.5)\n×8 → (324,220) 像素", xy=(4.5, 3.5), xytext=(1.0, 0.9),
                 arrowprops=dict(arrowstyle="->", color="#b42318", linewidth=1.5),
                 fontsize=10, color="#b42318", weight="bold")
-    ax.set_xlabel("列索引（完整特征图 80×60，灰点为参考点）")
+    ax.set_xlabel("列索引（图宽640/高480；网格宽80/高60）")
     ax.set_ylabel("特征图行索引")
     ax.set_xticks(np.arange(0.5, 8.5), labels=[str(i) for i in range(36, 44)])
     ax.set_yticks(np.arange(0.5, 6.5), labels=[str(i) for i in range(24, 30)])
@@ -152,7 +152,7 @@ def main():
     draw_flow_panel(fig.add_subplot(grid[1, 1]))
     fig.suptitle("GFL：一个特征点从参考点到预测框的完整过程", fontsize=18, weight="bold", y=0.98)
     fig.text(0.5, 0.015,
-             "参考点 P 由特征网格决定，不要求是物体中心；真实框和预测框只是共用 P 来表示四条边距离。",
+             "参考点 P 不要求是物体中心；本图采用半步偏移示意，具体坐标以实际生成器配置为准。",
              ha="center", fontsize=11, color="#334155")
     fig.savefig(OUT, bbox_inches="tight")
     print(f"saved: {OUT}")
