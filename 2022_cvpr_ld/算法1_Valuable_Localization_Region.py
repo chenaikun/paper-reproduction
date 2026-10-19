@@ -64,11 +64,17 @@ def calculate_DIoU_matrix(anchors: list,gts: list):
 
      return DIoU_matrix
 
+
+def calculate_val(DIoU_matrix: torch.Tensor,pos: float,a: float):
+     DIoU_matrix_val=(DIoU_matrix>=a*pos) & (DIoU_matrix<=pos)
+     return DIoU_matrix_val
+
+
 if __name__ == '__main__':
     anchors=[torch.tensor([2,3,4,6]),torch.tensor([1,5,2,8]),torch.tensor([1,4,7,5])]
     gts=[torch.tensor([2,5,6,8]),torch.tensor([1,7,5,9])]
-    X=torch.tensor([[0.10,0.30],[0.50,0.70],[-0.20,0.25]])
+    #X=torch.tensor([[0.10,0.30],[0.50,0.70],[-0.20,0.25]])
     pos=0.5
     a=0.5
-    X_new=(X>=a*pos) & (X<=pos)
+    X_new=calculate_val(calculate_DIoU_matrix(anchors,gts),pos,a)
     print(f"X_new: {X_new}")
