@@ -54,13 +54,19 @@ def calculate_iou_giou_diou(A: torch.Tensor,B: torch.Tensor):
 
     return [IoU,GIoU,DIoU]
 
+def calculate_DIoU_matrix(anchors: list,gts: list):
+     i=len(anchors)
+     j=len(gts)
+     DIoU_matrix=torch.zeros((i,j))
+     for m in range(i):
+        for n in range(j):
+            DIoU_matrix[m][n]=calculate_iou_giou_diou(anchors[m],gts[n])[2]
+
+     return DIoU_matrix
 
 if __name__ == '__main__':
     anchors=[torch.tensor([2,3,4,6]),torch.tensor([1,5,2,8]),torch.tensor([1,4,7,5])]
     gts=[torch.tensor([2,5,6,8]),torch.tensor([1,7,5,9])]
-    DIoU_matrix=torch.zeros((3,2))
-    for i in range(3):
-        for j in range(2):
-            DIoU_matrix[i][j]=calculate_iou_giou_diou(anchors[i],gts[j])[2]
-
+   
+    DIoU_matrix=calculate_DIoU_matrix(anchors,gts)
     print(f"DIoU_matrix:{DIoU_matrix}")
