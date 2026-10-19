@@ -67,6 +67,8 @@ def calculate_DIoU_matrix(anchors: list,gts: list):
 if __name__ == '__main__':
     anchors=[torch.tensor([2,3,4,6]),torch.tensor([1,5,2,8]),torch.tensor([1,4,7,5])]
     gts=[torch.tensor([2,5,6,8]),torch.tensor([1,7,5,9])]
-   
-    DIoU_matrix=calculate_DIoU_matrix(anchors,gts)
-    print(f"DIoU_matrix:{DIoU_matrix}")
+    X=torch.tensor([[0.10,0.30],[0.50,0.70],[-0.20,0.25]])
+    pos=0.5
+    a=0.5
+    X_new=(X>=a*pos) & (X<=pos)
+    print(f"X_new: {X_new}")
