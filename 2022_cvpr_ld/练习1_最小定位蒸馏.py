@@ -5,19 +5,30 @@ import torch
 
 
 def debug():
-    T_p=torch.tensor([[0.05,0.10,0.60,0.20,0.05]],dtype=torch.float32)
-    S_l=torch.zeros((1,5),requires_grad=True)
+    T_p=torch.tensor([[[0.05,0.10,0.60,0.20,0.05],
+                      [0.10, 0.60, 0.20, 0.05, 0.05],
+                      [0.05, 0.20, 0.60, 0.10, 0.05],
+                      [0.05, 0.10, 0.20, 0.60, 0.05]]],dtype=torch.float32)
+    T_l=torch.log(T_p)
+    S_l=torch.zeros((1,4,5),requires_grad=True)
     S_p=torch.softmax(S_l,dim=-1)
     optimzer=torch.optim.SGD([S_l],lr=0.1)
     i=0
-    while i<10000:
+    #S_l_log=torch.log_softmax(S_l,dim=-1)
+    #KL=torch.nn.functional.kl_div(S_l_log,T_p,reduction="none").sum(dim=-1).mean()
+    #print(f"KL: {KL}")
+
+    # print(f"T=1: {torch.softmax(T_l/1,dim=-1)},{torch.log_softmax(S_l/1,dim=-1)},{torch.nn.functional.kl_div(torch.log_softmax(S_l/1,dim=-1),torch.softmax(T_l/1,dim=-1),reduction='batchmean')}")
+    # print(f"T=2: {torch.softmax(T_l/2,dim=-1)},{torch.log_softmax(S_l/2,dim=-1)},{torch.nn.functional.kl_div(torch.log_softmax(S_l/2,dim=-1),torch.softmax(T_l/2,dim=-1),reduction='batchmean')}")
+    # print(f"T=3: {torch.softmax(T_l/3,dim=-1)},{torch.log_softmax(S_l/2,dim=-1)},{torch.nn.functional.kl_div(torch.log_softmax(S_l/3,dim=-1),torch.softmax(T_l/3,dim=-1),reduction='batchmean')}")
+    while i<1:
 
         optimzer.zero_grad()
         S_p=torch.softmax(S_l,dim=-1)
         S_l_log=torch.log_softmax(S_l,dim=-1)
-        kl=torch.nn.functional.kl_div(S_l_log,T_p,reduction="batchmean")
+        KL=torch.nn.functional.kl_div(S_l_log,T_p,reduction="none").sum(dim=-1).mean()
         
-        kl.backward()
+        KL.backward()
         optimzer.step()
 
         # S_l_new=S_l
@@ -29,7 +40,7 @@ def debug():
         if i%1000==0 :
             print(f"T_p: {T_p},S_p: {S_p}")
             print(f"S_p_sum: {S_p.sum(dim=-1)}")
-            print(f"KL: {kl}")
+            print(f"KL: {KL}")
             print(f"s_l.grad: {S_l.grad}")
 
         # print(f"S_l_new: {S_l_new}")
