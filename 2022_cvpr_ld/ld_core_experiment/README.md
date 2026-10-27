@@ -54,7 +54,8 @@ both the official PyTorch 1.7 stack and the PyTorch 1.11 compatibility stack.
 
 ## Dataset
 
-Set `VOC_DATA_ROOT` to the directory containing both VOC years:
+Set `VOC_DATA_ROOT` to the `VOCdevkit` directory. The configs support both
+separate-year data and the merged OpenI `VOC07_12` dataset.
 
 ```text
 VOCdevkit/
@@ -68,6 +69,13 @@ VOCdevkit/
     ├── ImageSets/Main/trainval.txt
     └── JPEGImages/
 ```
+
+The OpenI merged dataset may instead place the combined 2007+2012 training
+split and VOC2007 test split under `VOCdevkit/VOC2007/`, with no separate
+`VOC2012/` directory. The config detects the merged layout when the VOC2012
+trainval split file is absent. Its merged `VOC2007/ImageSets/Main/trainval.txt`
+should contain about 16,551 training images, as stated in that dataset's
+description.
 
 The default is `2022_cvpr_ld/data/VOCdevkit`. Validate it with:
 

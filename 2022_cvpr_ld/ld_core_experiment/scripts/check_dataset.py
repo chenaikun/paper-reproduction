@@ -1,4 +1,4 @@
-"""Validate the VOC2007+VOC2012 directory expected by the LD configs."""
+"""Validate split-year or merged VOC07+12 data layouts."""
 
 import argparse
 from pathlib import Path
@@ -26,13 +26,18 @@ def check_split(root, year, split):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data-root', type=Path, default=DEFAULT_VOC_ROOT,
-                        help='Directory containing VOC2007/ and VOC2012/.')
+                        help='VOCdevkit directory containing VOC2007/.')
     args = parser.parse_args()
     root = args.data_root.expanduser().resolve()
 
     check_split(root, 'VOC2007', 'trainval')
-    check_split(root, 'VOC2012', 'trainval')
     check_split(root, 'VOC2007', 'test')
+    voc2012_train = root / 'VOC2012' / 'ImageSets' / 'Main' / 'trainval.txt'
+    if voc2012_train.is_file():
+        check_split(root, 'VOC2012', 'trainval')
+        print('data_layout: split VOC2007 + VOC2012')
+    else:
+        print('data_layout: merged VOC07+12 under VOC2007')
     print('dataset_root: {}'.format(root))
     print('dataset: valid')
 

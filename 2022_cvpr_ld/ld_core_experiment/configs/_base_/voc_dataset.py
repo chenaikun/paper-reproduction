@@ -46,6 +46,17 @@ test_pipeline = [
 
 data_root = DATA_ROOT
 optimizer = dict(lr=0.01 * SAMPLES_PER_GPU * GPU_COUNT / 16)
+VOC2012_TRAIN_ANN = Path(DATA_ROOT) / 'VOC2012' / 'ImageSets' / 'Main' / 'trainval.txt'
+if VOC2012_TRAIN_ANN.is_file():
+    TRAIN_ANN_FILE = [
+        DATA_ROOT + 'VOC2007/ImageSets/Main/trainval.txt',
+        str(VOC2012_TRAIN_ANN),
+    ]
+    TRAIN_IMG_PREFIX = [DATA_ROOT + 'VOC2007/', DATA_ROOT + 'VOC2012/']
+else:
+    TRAIN_ANN_FILE = DATA_ROOT + 'VOC2007/ImageSets/Main/trainval.txt'
+    TRAIN_IMG_PREFIX = DATA_ROOT + 'VOC2007/'
+
 data = dict(
     samples_per_gpu=SAMPLES_PER_GPU,
     workers_per_gpu=WORKERS_PER_GPU,
@@ -54,11 +65,8 @@ data = dict(
         times=3,
         dataset=dict(
             type=dataset_type,
-            ann_file=[
-                DATA_ROOT + 'VOC2007/ImageSets/Main/trainval.txt',
-                DATA_ROOT + 'VOC2012/ImageSets/Main/trainval.txt',
-            ],
-            img_prefix=[DATA_ROOT + 'VOC2007/', DATA_ROOT + 'VOC2012/'],
+            ann_file=TRAIN_ANN_FILE,
+            img_prefix=TRAIN_IMG_PREFIX,
             pipeline=train_pipeline)),
     val=dict(
         type=dataset_type,
