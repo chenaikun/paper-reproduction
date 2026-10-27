@@ -36,8 +36,9 @@ def main():
     print('cuda_available: {}'.format(torch.cuda.is_available()))
     print('torch_cuda: {}'.format(torch.version.cuda or 'none'))
 
-    if not torch_version.startswith('1.7.'):
-        errors.append('expected PyTorch 1.7.x')
+    if not (torch_version.startswith('1.7.') or
+            torch_version.startswith('1.11.')):
+        errors.append('expected PyTorch 1.7.x or the Qizhi-compatible 1.11.x')
     if not mmcv_version.startswith('1.2.'):
         errors.append('expected mmcv-full 1.2.x (the experiment pins 1.2.7)')
     if not mmdet_version.startswith('2.10.'):
