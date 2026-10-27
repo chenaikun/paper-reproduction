@@ -1,53 +1,35 @@
-"""Print the tensor shapes used by GFL and localization distribution distillation."""
-
-from pathlib import Path
 import argparse
+from pathlib import Path
 
 import torch
-from mmengine.config import Config
+from mmcv import Config
+from mmdet.models import build_detector
 
-from mmdet.registry import DATASETS, MODELS
-from mmdet.utils import register_all_modules
-
-
-ROOT = Path(__file__).resolve().parents[1]
-CONFIG = ROOT / 'configs' / 'gfl_r18_voc_baseline.py'
+from _common import BASELINE_CONFIG
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=Path, default=CONFIG)
-    parser.add_argument('--data-root', type=Path, default=None,
-                        help='Directory containing VOC2007/.')
-    parser.add_argument('--device', default='cuda',
-                        help='Torch device, for example cuda or cuda:0.')
+    parser.add_argument('--config', type=Path, default=BASELINE_CONFIG)
+    parser.add_argument('--height', type=int, default=600)
+    parser.add_argument('--width', type=int, default=1000)
+    parser.add_argument('--device', default='cuda:0')
     args = parser.parse_args()
 
-    device = torch.device(args.device)
-    register_all_modules(init_default_scope=True)
-    cfg = Config.fromfile(str(args.config))
-    if args.data_root:
-        cfg.train_dataloader.dataset.data_root = str(args.data_root)
-    model = MODELS.build(cfg.model).to(device).eval()
-    dataset = DATASETS.build(cfg.train_dataloader.dataset)
-    sample = dataset[0]
-    batch = model.data_preprocessor(
-        {'inputs': [sample['inputs']], 'data_samples': [sample['data_samples']]},
-        training=False,
-    )
-
+    cfg = Config.fromfile(str(args.config.resolve()))
+    model = build_detector(cfg.model).to(args.device).eval()
+    image = torch.zeros(1, 3, args.height, args.width, device=args.device)
     with torch.no_grad():
-        feats = model.extract_feat(batch['inputs'])
-        cls_scores, bbox_preds = model.bbox_head(feats)
+        features = model.extract_feat(image)
+        cls_scores, bbox_preds = model.bbox_head(features)
 
-    print(f"input: {tuple(batch['inputs'].shape)}")
-    print(f"feature levels: {len(feats)}")
-    for level, (feat, cls, bbox) in enumerate(zip(feats, cls_scores, bbox_preds)):
-        print(
-            f"level {level}: feature={tuple(feat.shape)}, "
-            f"cls_logits={tuple(cls.shape)}, bbox_logits={tuple(bbox.shape)}"
-        )
-    print('bbox channels = 4 * (reg_max + 1); each edge has a discrete distribution.')
+    print('input: {}'.format(tuple(image.shape)))
+    for level, (feature, cls_score, bbox_pred) in enumerate(
+            zip(features, cls_scores, bbox_preds)):
+        print('level {}: feature={}, cls_logits={}, bbox_logits={}'.format(
+            level, tuple(feature.shape), tuple(cls_score.shape),
+            tuple(bbox_pred.shape)))
+    print('bbox channels = 4 * (reg_max + 1); each edge is a discrete distribution.')
 
 
 if __name__ == '__main__':

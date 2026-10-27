@@ -1,124 +1,137 @@
 # LD Core Experiment
 
-This directory contains the low-resource GFL baseline and the follow-up
-Localization Distillation experiments. The current runnable milestone is the
-student baseline smoke test; the teacher-student LD loss is added only after
-that baseline is verified.
+This experiment uses the bundled official LD/MMDetection 2.10 code in
+`2022_cvpr_ld/LD`. All experiment configs inherit the official VOC/GFL/LD
+configs; training and evaluation delegate to that checkout's `tools/` entry
+points. Do not install the MMDetection 3 stack in this environment.
 
-## 1. Expected data layout
+## Environment
 
-`VOC_DATA_ROOT` must point to the directory containing `VOC2007/`:
-
-```text
-2022_cvpr_ld/
-├── data/
-│   └── VOC2007/
-│       ├── Annotations/
-│       ├── ImageSets/Main/trainval.txt
-│       ├── ImageSets/Main/test.txt
-│       └── JPEGImages/
-└── ld_core_experiment/
-```
-
-The default is `2022_cvpr_ld/data`. On a remote machine, use an absolute path
-without changing the config:
+The official install guide targets Python 3.7, PyTorch 1.7, CUDA 11.0, and
+`mmcv-full==1.2.7`. Create a separate environment and install the CUDA-matched
+MMCV wheel before installing the LD checkout:
 
 ```bash
-export VOC_DATA_ROOT=/path/to/data
+conda create -n ld-core python=3.7 -y
+conda activate ld-core
+conda install pytorch=1.7 torchvision cudatoolkit=11.0 -c pytorch
+python -m pip install pip==24.0
+python -m pip install -r 2022_cvpr_ld/ld_core_experiment/requirements.txt \
+  -f https://download.openmmlab.com/mmcv/dist/cu110/torch1.7/index.html
+python -m pip install -v -e ./2022_cvpr_ld/LD
 ```
 
-## 2. Environment
-
-Use a Python environment with a CUDA-enabled PyTorch installation. Install the
-PyTorch and torchvision wheels that match the CUDA image first. Then install
-the OpenMMLab packages:
+If the project was cloned from Git, initialize the official source first:
 
 ```bash
-python -m pip install -U pip openmim
-python -m pip install -r 2022_cvpr_ld/ld_core_experiment/requirements.txt
+git submodule update --init --recursive
 ```
 
-If `mmcv` has no matching prebuilt wheel for the selected PyTorch/CUDA pair,
-install it with OpenMIM instead of forcing a source build:
-
-```bash
-mim install "mmengine>=0.10.0,<1.0" "mmcv>=2.0.0,<2.2.0" "mmdet>=3.0.0,<3.4.0"
-```
-
-Verify the runtime before spending GPU time:
+Check the installed stack and GPU before training:
 
 ```bash
 python 2022_cvpr_ld/ld_core_experiment/scripts/check_environment.py --require-cuda
 ```
 
-## 3. Smoke test
+The check rejects MMDetection 3, MMCV 2, or a different imported `mmdet`
+checkout so the scripts do not silently run against the wrong API.
 
-The smoke test checks one forward/backward step and then trains a small subset
-for one epoch. It disables validation to keep the first remote run short.
+## Dataset
+
+Set `VOC_DATA_ROOT` to the directory containing both VOC years:
+
+```text
+VOCdevkit/
+├── VOC2007/
+│   ├── Annotations/
+│   ├── ImageSets/Main/trainval.txt
+│   ├── ImageSets/Main/test.txt
+│   └── JPEGImages/
+└── VOC2012/
+    ├── Annotations/
+    ├── ImageSets/Main/trainval.txt
+    └── JPEGImages/
+```
+
+The default is `2022_cvpr_ld/data/VOCdevkit`. Validate it with:
+
+```bash
+python 2022_cvpr_ld/ld_core_experiment/scripts/check_dataset.py \
+  --data-root /path/to/VOCdevkit
+```
+
+The low-resource configs use VOC2007+VOC2012 trainval and VOC2007 test, one
+sample per GPU by default, and a 1000x600 resize. These are low-resource
+settings, not the paper's full COCO setup.
+
+## Smoke Test
+
+This performs a real forward/backward/optimizer step using the official
+MMDetection 2 data/model APIs. It does not start a full epoch:
 
 ```bash
 cd 2022_cvpr_ld/ld_core_experiment
-VOC_DATA_ROOT=/path/to/data ./run_smoke.sh
+VOC_DATA_ROOT=/path/to/VOCdevkit ./run_smoke.sh
 ```
 
-Optional overrides:
+After training the teacher, include its checkpoint to also smoke-test the LD
+student and frozen-teacher forward:
 
 ```bash
-SMOKE_SAMPLES=32 SMOKE_EPOCHS=1 WORK_DIR=/tmp/ld-smoke \
-  VOC_DATA_ROOT=/path/to/data ./run_smoke.sh
+VOC_DATA_ROOT=/path/to/VOCdevkit \
+TEACHER_CHECKPOINT=/path/to/teacher/epoch_16.pth \
+./run_smoke.sh
 ```
 
-The expected checkpoint is:
+## Training Order
 
-```text
-ld_core_experiment/runs/smoke/epoch_1.pth
+Train the R101 teacher first. The config uses ImageNet initialization and the
+official 16-epoch VOC schedule by default:
+
+```bash
+python scripts/train_teacher.py \
+  --data-root /path/to/VOCdevkit \
+  --work-dir runs/teacher_r101 \
+  --epochs 16 \
+  --samples-per-gpu 1
 ```
 
-## 4. Baseline training and evaluation
-
-After the smoke test succeeds, run the configured student baseline:
+Then train the GFL-R18 student baseline:
 
 ```bash
 python scripts/train_baseline.py \
-  --data-root /path/to/data \
-  --epochs 12 \
-  --work-dir runs/student_r18_baseline
+  --data-root /path/to/VOCdevkit \
+  --work-dir runs/student_r18_baseline \
+  --epochs 4 \
+  --samples-per-gpu 1
 ```
 
-Evaluate a checkpoint:
+Run the three teacher-student ablations. The default teacher checkpoint is
+`runs/teacher_r101/epoch_16.pth`:
+
+```bash
+python scripts/train_ld.py --variant kd-only \
+  --teacher-checkpoint runs/teacher_r101/epoch_16.pth
+python scripts/train_ld.py --variant loc-only \
+  --teacher-checkpoint runs/teacher_r101/epoch_16.pth
+python scripts/train_ld.py --variant full \
+  --teacher-checkpoint runs/teacher_r101/epoch_16.pth
+```
+
+The LD head uses the official `loss_kd`, `loss_ld`, and `loss_ld_vlr`
+implementations. `kd-only` disables both localization losses; `loc-only`
+disables classification KD; `full` retains all three. All variants retain the
+student's GT detection losses.
+
+Evaluate a checkpoint with the same config used for that run:
 
 ```bash
 python scripts/evaluate_baseline.py \
   --config configs/gfl_r18_voc_baseline.py \
-  --checkpoint runs/student_r18_baseline/epoch_12.pth \
-  --data-root /path/to/data \
-  --work-dir runs/student_r18_baseline_eval
+  --checkpoint runs/student_r18_baseline/epoch_4.pth \
+  --data-root /path/to/VOCdevkit
 ```
 
-Inspect the GFL output shapes before implementing distribution distillation:
-
-```bash
-python scripts/inspect_gfl_outputs.py --data-root /path/to/data
-```
-
-The current config uses VOC2007 trainval and VOC2007 test. The broader
-VOC2007+VOC2012 training split described in the research notes still needs a
-separate dataset config.
-
-## 5. Current scope
-
-The files currently implement:
-
-- GFL-ResNet-18 student baseline;
-- GFL-ResNet-50 teacher architecture config;
-- dataset, environment, forward/backward, training, and evaluation checks.
-
-They do not yet implement the four final ablations. In particular, the
-teacher config is not a distillation trainer. The official source is available
-as the `2022_cvpr_ld/LD` submodule. It bundles MMDetection 2.10.0, while these
-baseline scripts/configs use the MMDetection 3 API. Do not install both code
-paths into the same Python environment; `requirements.txt` here is for the
-MMDetection 3 baseline only. For official LD configs, follow
-`2022_cvpr_ld/LD/docs/install.md` in a separate environment. The next step is
-to choose one implementation path and make its VOC config/data layout and
-smoke test reproducible before starting long training runs.
+For an LD checkpoint, pass its matching `configs/ld_r18_voc_*.py` config and
+`--teacher-checkpoint` as well. The T4-oriented default is batch size 1; reduce
+the resize further if the teacher-student step runs out of memory.
