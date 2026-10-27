@@ -1,4 +1,4 @@
-"""Verify that this checkout is using the official MMDetection 2.10 stack."""
+"""Verify the LD/MMDetection 2.10 stack and its PyTorch compatibility mode."""
 
 import argparse
 from pathlib import Path
@@ -36,16 +36,22 @@ def main():
     print('cuda_available: {}'.format(torch.cuda.is_available()))
     print('torch_cuda: {}'.format(torch.version.cuda or 'none'))
 
-    supported_torch = ('1.7.', '1.8.', '1.9.', '1.10.', '1.11.')
+    supported_torch = (
+        '1.7.', '1.8.', '1.9.', '1.10.', '1.11.', '2.0.', '2.1.')
     if not torch_version.startswith(supported_torch):
-        errors.append(
-            'expected a PyTorch 1.7-1.11 environment; newer PyTorch releases '
-            'need a separately validated MMDetection 2 compatibility build')
-    elif not torch_version.startswith(('1.7.', '1.8.', '1.11.')):
-        print('warning: PyTorch {} is not one of the primary tested versions '
-              '(1.7, 1.8, 1.11)'.format(torch_version))
-    if not mmcv_version.startswith('1.2.'):
-        errors.append('expected mmcv-full 1.2.x (the experiment pins 1.2.7)')
+        errors.append('expected PyTorch 1.7-1.11 or 2.0-2.1')
+
+    if not mmcv_version.startswith(('1.2.', '1.7.')):
+        errors.append('expected mmcv-full 1.2.x or 1.7.x')
+    elif torch_version.startswith(('2.0.', '2.1.')) and not mmcv_version.startswith('1.7.'):
+        errors.append('PyTorch 2.x requires the MMCV 1.7.x compatibility path')
+    elif torch_version.startswith(('1.7.', '1.8.', '1.11.')) and mmcv_version.startswith('1.2.'):
+        print('environment mode: original LD reference stack')
+    elif torch_version.startswith(('2.0.', '2.1.')):
+        print('environment mode: PyTorch 2.x compatibility stack')
+    else:
+        print('warning: this torch/MMCV pair is accepted but not a primary '
+              'tested combination')
     if not mmdet_version.startswith('2.10.'):
         errors.append('expected MMDetection 2.10.x')
     if not str(Path(mmdet.__file__).resolve()).startswith(str(LD_ROOT.resolve())):

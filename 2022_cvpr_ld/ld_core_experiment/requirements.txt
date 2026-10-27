@@ -1,4 +1,4 @@
-# PyTorch 1.7 is the official LD reference environment. PyTorch 1.8 and 1.11
-# are supported compatibility environments; see README.md for the hardware
-# and MMCV build requirements.
-mmcv-full==1.2.7
+# Modern compatibility path for the bundled MMDetection 2.10 LD code.
+# PyTorch is supplied by the platform image. MMCV 1.7.2 keeps the mmcv.runner
+# API used by this checkout and provides wheels for PyTorch 2.0/2.1.
+mmcv-full==1.7.2

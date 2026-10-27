@@ -7,10 +7,11 @@ points. Do not install the MMDetection 3 stack in this environment.
 
 ## Environment
 
-The official LD guide targets Python 3.7, PyTorch 1.7, CUDA 11.0, and
-`mmcv-full==1.2.7`. The experiment keeps the official LD/MMDetection 2.10 code
-and supports the validated PyTorch 1.7/1.8/1.11 compatibility range. Do not
-install MMCV 2.x or the MMDetection 3 stack.
+The original LD guide targets Python 3.7, PyTorch 1.7, CUDA 11.0, and
+`mmcv-full==1.2.7`. The default experiment environment is now the modern
+compatibility path: PyTorch 2.0/2.1 with `mmcv-full==1.7.2`, while retaining the
+official MMDetection 2.10 LD code and APIs. Do not install MMCV 2.x or the
+MMDetection 3 stack for this checkout.
 
 If the project was cloned from Git, initialize the official source first:
 
@@ -19,19 +20,19 @@ git submodule update --init --recursive
 ```
 
 ```bash
-# Run these commands inside a PyTorch 1.7, 1.8, or 1.11 environment.
+# Run these commands inside a platform PyTorch 2.0 or 2.1 environment.
 # Verify the preinstalled versions before changing anything:
 python -c "import torch; print(torch.__version__, torch.version.cuda)"
-python -m pip install pip==24.0
-python -m pip install setuptools==59.5.0 wheel cython ninja
-python -m pip uninstall -y mmcv mmcv-full
-python -m pip install --no-binary mmcv-full \
-  -r 2022_cvpr_ld/ld_core_experiment/requirements.txt
+python -m pip install -U openmim
+python -m pip uninstall -y mmcv mmcv-lite mmcv-full
+mim install "mmcv-full==1.7.2"
 python -m pip install -v -e ./2022_cvpr_ld/LD
 ```
 
-The MMCV source build can take several minutes and needs a CUDA toolkit with
-`nvcc` in the image. Check it before starting the build:
+`mmcv-full==1.7.2` is preferred for the PyTorch 2.x path because its published
+packages cover PyTorch 2.0/2.1. If no matching package exists for the exact
+platform CUDA build, install it from source and check that the CUDA toolkit is
+available:
 
 ```bash
 nvcc --version
@@ -47,8 +48,10 @@ Check the installed stack and GPU before training:
 python 2022_cvpr_ld/ld_core_experiment/scripts/check_environment.py --require-cuda
 ```
 
-The check rejects MMDetection 3, MMCV 2, or a different imported `mmdet`
-checkout so the scripts do not silently run against the wrong API.
+The check rejects MMDetection 3, MMCV 2, unsupported PyTorch versions, or a
+different imported `mmdet` checkout so the scripts do not silently run against
+the wrong API. The original environment is still available with
+`requirements-legacy.txt` if exact paper-era reproduction is required.
 
 ## Hardware Profiles
 

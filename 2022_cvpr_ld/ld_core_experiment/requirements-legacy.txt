@@ -1,0 +1,2 @@
+# Original LD reference dependency.
+mmcv-full==1.2.7
