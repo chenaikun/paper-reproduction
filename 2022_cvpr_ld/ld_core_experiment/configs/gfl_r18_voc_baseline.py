@@ -1,6 +1,14 @@
+import os
+from pathlib import Path
+
+
 _base_ = ['./_base_/gfl_r50_fpn_1x_coco.py']
 
-data_root = 'D:/code/paper/paper2022-cvpr-ld/paper-reproduction/2022_cvpr_ld/data/'
+# The directory must contain VOC2007/, unless VOC_DATA_ROOT points elsewhere.
+# Keeping the default relative to this config makes the experiment portable
+# between the local checkout and a remote training machine.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+data_root = os.environ.get('VOC_DATA_ROOT', str(PROJECT_ROOT / 'data'))
 dataset_type = 'VOCDataset'
 
 train_pipeline = [

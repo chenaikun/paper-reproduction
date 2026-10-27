@@ -1,6 +1,7 @@
 """Print the tensor shapes used by GFL and localization distribution distillation."""
 
 from pathlib import Path
+import argparse
 
 import torch
 from mmengine.config import Config
@@ -14,9 +15,20 @@ CONFIG = ROOT / 'configs' / 'gfl_r18_voc_baseline.py'
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=Path, default=CONFIG)
+    parser.add_argument('--data-root', type=Path, default=None,
+                        help='Directory containing VOC2007/.')
+    parser.add_argument('--device', default='cuda',
+                        help='Torch device, for example cuda or cuda:0.')
+    args = parser.parse_args()
+
+    device = torch.device(args.device)
     register_all_modules(init_default_scope=True)
-    cfg = Config.fromfile(str(CONFIG))
-    model = MODELS.build(cfg.model).cuda().eval()
+    cfg = Config.fromfile(str(args.config))
+    if args.data_root:
+        cfg.train_dataloader.dataset.data_root = str(args.data_root)
+    model = MODELS.build(cfg.model).to(device).eval()
     dataset = DATASETS.build(cfg.train_dataloader.dataset)
     sample = dataset[0]
     batch = model.data_preprocessor(
