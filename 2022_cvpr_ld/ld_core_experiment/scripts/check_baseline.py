@@ -26,15 +26,28 @@ def main():
     parser.add_argument('--data-root', type=Path, default=None)
     parser.add_argument('--teacher-checkpoint', type=Path, default=None)
     parser.add_argument('--gpu-id', type=int, default=0)
-    parser.add_argument('--workers', type=int, default=0)
+    parser.add_argument('--workers', type=int, default=None)
+    parser.add_argument('--samples-per-gpu', type=int, default=None)
+    parser.add_argument('--profile', choices=['auto', 'tiny', 'low', 'default', 'high'],
+                        default=None)
+    parser.add_argument('--fp16', action='store_true',
+                        help='enable dynamic-loss-scale mixed precision')
     args = parser.parse_args()
 
     if not torch.cuda.is_available():
         raise SystemExit('CUDA is required for the GPU training-step check.')
 
-    env = build_env(args.data_root, args.teacher_checkpoint, 1, args.workers)
-    for name in ('VOC_DATA_ROOT', 'SAMPLES_PER_GPU', 'WORKERS_PER_GPU',
-                 'TEACHER_CHECKPOINT'):
+    env = build_env(
+        args.data_root,
+        args.teacher_checkpoint,
+        args.samples_per_gpu,
+        args.workers,
+        profile=args.profile,
+        gpu_count=1,
+        fp16=args.fp16)
+    for name in ('VOC_DATA_ROOT', 'LD_PROFILE', 'LD_IMAGE_WIDTH',
+                 'LD_IMAGE_HEIGHT', 'SAMPLES_PER_GPU', 'WORKERS_PER_GPU',
+                 'GPU_COUNT', 'USE_FP16', 'TEACHER_CHECKPOINT'):
         if name in env:
             os.environ[name] = env[name]
 
@@ -42,8 +55,8 @@ def main():
     dataset = build_dataset(cfg.data.train)
     dataloader = build_dataloader(
         dataset,
-        samples_per_gpu=1,
-        workers_per_gpu=args.workers,
+        samples_per_gpu=cfg.data.samples_per_gpu,
+        workers_per_gpu=cfg.data.workers_per_gpu,
         num_gpus=1,
         dist=False,
         shuffle=True)

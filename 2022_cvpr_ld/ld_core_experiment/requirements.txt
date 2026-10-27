@@ -1,3 +1,4 @@
-# PyTorch 1.7 is the official LD reference environment. On Qizhi, PyTorch 1.11
-# is supported by building this pinned MMCV release from source; see README.md.
+# PyTorch 1.7 is the official LD reference environment. PyTorch 1.8 and 1.11
+# are supported compatibility environments; see README.md for the hardware
+# and MMCV build requirements.
 mmcv-full==1.2.7

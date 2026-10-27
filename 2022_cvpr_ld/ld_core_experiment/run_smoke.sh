@@ -7,7 +7,7 @@ PYTHON_BIN="${PYTHON_BIN:-python}"
 VOC_DATA_ROOT="${VOC_DATA_ROOT:-${PROJECT_ROOT}/data/VOCdevkit}"
 
 export VOC_DATA_ROOT
-export SAMPLES_PER_GPU=1
+export LD_PROFILE="${LD_PROFILE:-auto}"
 export WORKERS_PER_GPU="${WORKERS_PER_GPU:-0}"
 
 "${PYTHON_BIN}" "${SCRIPT_DIR}/scripts/check_environment.py" --require-cuda

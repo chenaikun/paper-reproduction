@@ -8,10 +8,9 @@ points. Do not install the MMDetection 3 stack in this environment.
 ## Environment
 
 The official LD guide targets Python 3.7, PyTorch 1.7, CUDA 11.0, and
-`mmcv-full==1.2.7`. The Qizhi image currently starts at PyTorch 1.11, so use the
-compatibility path below: keep the official LD/MMDetection 2.10 code and build
-the pinned MMCV version locally against the installed PyTorch. Do not install
-MMCV 2.x or the MMDetection 3 stack.
+`mmcv-full==1.2.7`. The experiment keeps the official LD/MMDetection 2.10 code
+and supports the validated PyTorch 1.7/1.8/1.11 compatibility range. Do not
+install MMCV 2.x or the MMDetection 3 stack.
 
 If the project was cloned from Git, initialize the official source first:
 
@@ -20,7 +19,7 @@ git submodule update --init --recursive
 ```
 
 ```bash
-# Run these commands inside the platform-provided PyTorch 1.11 environment.
+# Run these commands inside a PyTorch 1.7, 1.8, or 1.11 environment.
 # Verify the preinstalled versions before changing anything:
 python -c "import torch; print(torch.__version__, torch.version.cuda)"
 python -m pip install pip==24.0
@@ -49,8 +48,40 @@ python 2022_cvpr_ld/ld_core_experiment/scripts/check_environment.py --require-cu
 ```
 
 The check rejects MMDetection 3, MMCV 2, or a different imported `mmdet`
-checkout so the scripts do not silently run against the wrong API. It accepts
-both the official PyTorch 1.7 stack and the PyTorch 1.11 compatibility stack.
+checkout so the scripts do not silently run against the wrong API.
+
+## Hardware Profiles
+
+The experiment uses the `auto` profile by default and selects a conservative
+resize from the visible GPU memory. This lets the same code run on T4, V100,
+RTX3090, and smaller cards without editing model configs:
+
+```bash
+# 640x384, one sample, no data-loader workers
+LD_PROFILE=tiny python scripts/train_baseline.py --data-root /path/to/VOCdevkit
+
+# 1000x600, one sample, two workers
+LD_PROFILE=default python scripts/train_baseline.py --data-root /path/to/VOCdevkit
+
+# 1333x800, one sample, four workers
+LD_PROFILE=high python scripts/train_baseline.py --data-root /path/to/VOCdevkit
+```
+
+The available profiles are `tiny`, `low`, `default`, and `high`. Individual
+settings can also be overridden with `LD_IMAGE_WIDTH`, `LD_IMAGE_HEIGHT`,
+`SAMPLES_PER_GPU`, and `WORKERS_PER_GPU`. Dynamic-loss-scale FP16 is optional:
+
+```bash
+LD_PROFILE=low WORKERS_PER_GPU=0 \
+  python scripts/train_ld.py --variant full --fp16 \
+  --teacher-checkpoint runs/teacher_r101/epoch_16.pth
+```
+
+Multiple visible GPUs can be selected without changing the configs:
+
+```bash
+python scripts/train_baseline.py --gpu-ids 0,1 --profile default
+```
 
 ## Dataset
 
@@ -85,8 +116,8 @@ python 2022_cvpr_ld/ld_core_experiment/scripts/check_dataset.py \
 ```
 
 The low-resource configs use VOC2007+VOC2012 trainval and VOC2007 test, one
-sample per GPU by default, and a 1000x600 resize. These are low-resource
-settings, not the paper's full COCO setup.
+sample per GPU by default, and an automatic resize profile. These are
+low-resource settings, not the paper's full COCO setup.
 
 ## Smoke Test
 

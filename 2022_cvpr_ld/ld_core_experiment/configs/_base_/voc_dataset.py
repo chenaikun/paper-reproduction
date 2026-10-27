@@ -7,9 +7,49 @@ PROJECT_ROOT = EXPERIMENT_ROOT.parent
 VOC_DATA_ROOT = Path(os.environ.get(
     'VOC_DATA_ROOT', PROJECT_ROOT / 'data' / 'VOCdevkit')).expanduser()
 DATA_ROOT = str(VOC_DATA_ROOT.resolve()) + os.sep
-SAMPLES_PER_GPU = int(os.environ.get('SAMPLES_PER_GPU', '1'))
-WORKERS_PER_GPU = int(os.environ.get('WORKERS_PER_GPU', '2'))
-GPU_COUNT = int(os.environ.get('GPU_COUNT', '1'))
+
+RUNTIME_PROFILES = {
+    'tiny': dict(width=640, height=384, samples_per_gpu=1, workers=0),
+    'low': dict(width=800, height=480, samples_per_gpu=1, workers=0),
+    'default': dict(width=1000, height=600, samples_per_gpu=1, workers=2),
+    'high': dict(width=1333, height=800, samples_per_gpu=1, workers=4),
+}
+
+
+def _auto_profile():
+    try:
+        import torch
+        if torch.cuda.is_available():
+            memory_gib = torch.cuda.get_device_properties(0).total_memory / 1024 ** 3
+            if memory_gib < 12:
+                return 'tiny'
+            if memory_gib < 20:
+                return 'low'
+    except Exception:
+        pass
+    return 'default'
+
+
+PROFILE_NAME = os.environ.get('LD_PROFILE', 'auto').lower()
+if PROFILE_NAME == 'auto':
+    PROFILE_NAME = _auto_profile()
+if PROFILE_NAME not in RUNTIME_PROFILES:
+    raise ValueError(
+        'Unknown LD_PROFILE {!r}; choose auto, tiny, low, default, or high'.format(
+            PROFILE_NAME))
+PROFILE = RUNTIME_PROFILES[PROFILE_NAME]
+
+
+def _env_int(name, default):
+    value = os.environ.get(name)
+    return int(value) if value is not None else default
+
+
+IMAGE_WIDTH = _env_int('LD_IMAGE_WIDTH', PROFILE['width'])
+IMAGE_HEIGHT = _env_int('LD_IMAGE_HEIGHT', PROFILE['height'])
+SAMPLES_PER_GPU = _env_int('SAMPLES_PER_GPU', PROFILE['samples_per_gpu'])
+WORKERS_PER_GPU = _env_int('WORKERS_PER_GPU', PROFILE['workers'])
+GPU_COUNT = _env_int('GPU_COUNT', 1)
 
 dataset_type = 'VOCDataset'
 img_norm_cfg = dict(
@@ -20,7 +60,7 @@ img_norm_cfg = dict(
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
-    dict(type='Resize', img_scale=(1000, 600), keep_ratio=True),
+    dict(type='Resize', img_scale=(IMAGE_WIDTH, IMAGE_HEIGHT), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', size_divisor=32),
@@ -32,7 +72,7 @@ test_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(
         type='MultiScaleFlipAug',
-        img_scale=(1000, 600),
+        img_scale=(IMAGE_WIDTH, IMAGE_HEIGHT),
         flip=False,
         transforms=[
             dict(type='Resize', keep_ratio=True),
@@ -79,3 +119,6 @@ data = dict(
         img_prefix=DATA_ROOT + 'VOC2007/',
         pipeline=test_pipeline))
 evaluation = dict(interval=1, metric='mAP')
+
+if os.environ.get('USE_FP16', '0').lower() in ('1', 'true', 'yes', 'on'):
+    fp16 = dict(loss_scale='dynamic')

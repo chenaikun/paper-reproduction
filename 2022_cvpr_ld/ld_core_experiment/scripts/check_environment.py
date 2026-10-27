@@ -36,9 +36,14 @@ def main():
     print('cuda_available: {}'.format(torch.cuda.is_available()))
     print('torch_cuda: {}'.format(torch.version.cuda or 'none'))
 
-    if not (torch_version.startswith('1.7.') or
-            torch_version.startswith('1.11.')):
-        errors.append('expected PyTorch 1.7.x or the Qizhi-compatible 1.11.x')
+    supported_torch = ('1.7.', '1.8.', '1.9.', '1.10.', '1.11.')
+    if not torch_version.startswith(supported_torch):
+        errors.append(
+            'expected a PyTorch 1.7-1.11 environment; newer PyTorch releases '
+            'need a separately validated MMDetection 2 compatibility build')
+    elif not torch_version.startswith(('1.7.', '1.8.', '1.11.')):
+        print('warning: PyTorch {} is not one of the primary tested versions '
+              '(1.7, 1.8, 1.11)'.format(torch_version))
     if not mmcv_version.startswith('1.2.'):
         errors.append('expected mmcv-full 1.2.x (the experiment pins 1.2.7)')
     if not mmdet_version.startswith('2.10.'):
