@@ -19,8 +19,7 @@ def check_ops(torch, nms, roi_align, device):
         raise RuntimeError('NMS returned unexpected indices on ' + device)
     feature = torch.ones(1, 1, 8, 8, device=device, requires_grad=True)
     rois = torch.tensor([[0., 1., 1., 6., 6.]], device=device)
-    output = roi_align(feature, rois, (2, 2), spatial_scale=1.0,
-                       sampling_ratio=2, pool_mode='avg', aligned=True)
+    output = roi_align(feature, rois, (2, 2), 1.0, 2, 'avg', True)
     output.sum().backward()
     if (not torch.isfinite(output).all().item() or feature.grad is None
             or not torch.isfinite(feature.grad).all().item()
