@@ -1,5 +1,5 @@
 import os
-import runpy as _runpy
+import runpy as _runpy  # noqa: E402
 
 
 _base_ = '../../LD/configs/ld/ld_r18_gflv1_r101_fpn_voc_1x.py'

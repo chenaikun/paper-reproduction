@@ -7,8 +7,17 @@ def build_voc_overrides(project_root):
 
 
     PROJECT_ROOT = Path(project_root).resolve()
+    def _default_voc_root():
+        candidates = [PROJECT_ROOT / 'data' / 'VOCdevkit',
+                      PROJECT_ROOT / 'data']
+        for candidate in candidates:
+            if (candidate / 'VOC2007' / 'ImageSets' / 'Main' /
+                    'trainval.txt').is_file():
+                return candidate
+        return candidates[0]
+
     VOC_DATA_ROOT = Path(os.environ.get(
-        'VOC_DATA_ROOT', PROJECT_ROOT / 'data' / 'VOCdevkit')).expanduser()
+        'VOC_DATA_ROOT', _default_voc_root())).expanduser()
     DATA_ROOT = str(VOC_DATA_ROOT.resolve()) + os.sep
 
     RUNTIME_PROFILES = {

@@ -47,22 +47,28 @@ def main():
         import torchvision
         import numpy as np
         import mmcv
-        import mmdet
         from mmcv.ops import nms, roi_align
-        from mmdet.apis import train_detector  # noqa: F401
-        from mmdet.datasets import build_dataset  # noqa: F401
-        from mmdet.models.builder import HEADS, DETECTORS
     except Exception as exc:
-        raise SystemExit('OpenMMLab import failed: {}: {}'.format(
+        raise SystemExit('Core dependency import failed: {}: {}'.format(
             type(exc).__name__, exc))
 
     print('torch: {}'.format(torch.__version__))
     print('torchvision: {}'.format(torchvision.__version__))
     print('numpy: {}'.format(np.__version__))
     print('mmcv: {}'.format(mmcv.__version__))
+    print('torch_cuda: {}'.format(torch.version.cuda or 'none'))
+
+    try:
+        import mmdet
+        from mmdet.apis import train_detector  # noqa: F401
+        from mmdet.datasets import build_dataset  # noqa: F401
+        from mmdet.models.builder import HEADS, DETECTORS
+    except Exception as exc:
+        raise SystemExit('Bundled MMDetection import failed: {}: {}'.format(
+            type(exc).__name__, exc))
+
     print('mmdet: {}'.format(mmdet.__version__))
     print('mmdet_path: {}'.format(Path(mmdet.__file__).resolve()))
-    print('torch_cuda: {}'.format(torch.version.cuda or 'none'))
     errors = []
     if not torch.__version__.startswith(('2.0.', '2.1.')):
         errors.append('modern stack requires PyTorch 2.0.x or 2.1.x')

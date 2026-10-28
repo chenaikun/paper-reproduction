@@ -5,14 +5,43 @@ This experiment uses the bundled official LD/MMDetection 2.10 code in
 configs; training and evaluation delegate to that checkout's `tools/` entry
 points. Do not install the MMDetection 3 stack in this environment.
 
+For a guided walkthrough, see
+[`docs/ld_core_experiment_代码导读.md`](docs/ld_core_experiment_代码导读.md)
+and
+[`docs/从零读懂_ld_core_experiment.md`](docs/从零读懂_ld_core_experiment.md).
+
 ## Environment
 
-Use Linux x86_64, Python 3.8/3.9 (3.10 also accepted), PyTorch **2.0.1**,
-torchvision **0.15.2**, CUDA **11.8**, and **mmcv-full 1.7.2**. PyTorch 2.1.x
-is an alternate compatibility target, not a promise that every CUDA/Python
-combination has a prebuilt MMCV wheel. Do not install MMCV 2.x or MMDetection
-3.x. One V100S 32GB or RTX 3090/4090 24GB is a reasonable starting point;
-actual memory use must be checked with the smoke test.
+The completed core-mechanism run used:
+
+| Item | Recorded environment |
+|---|---|
+| GPU | One Tesla V100S-PCIE-32GB |
+| OS | Linux x86_64 |
+| Python | 3.8.18 |
+| PyTorch | 2.0.0+cu118 |
+| torchvision | 0.15.1+cu118 |
+| CUDA / NVCC | 11.8 |
+| MMCV | `mmcv-full==1.7.2` |
+| Detector stack | Bundled LD / MMDetection 2.10.0+4287990 |
+| Training data | VOC2007 trainval + VOC2012 trainval, 16,551 images |
+| Test data | VOC2007 test, 4,952 images |
+
+The installer accepts PyTorch 2.0.x or 2.1.x with the matching torchvision
+and CUDA-specific `mmcv-full==1.7.2` wheel. The recorded run used
+PyTorch 2.0.0 and torchvision 0.15.1. Do not install MMCV 2.x or
+MMDetection 3.x.
+
+The recorded cloud paths were:
+
+```text
+Data:  /cloud/cloud-ssd1/ld-data/VOCdevkit
+Runs:  /cloud/cloud-ssd1/ld-runs
+Logs:  /cloud/cloud-ssd1/ld-runs/logs
+```
+
+The one-epoch mechanism run is summarized in
+[`one_epoch_mechanism_results.md`](one_epoch_mechanism_results.md).
 
 From the repository root, after choosing a CUDA-enabled PyTorch image:
 
@@ -78,8 +107,17 @@ python -m unittest discover -s 2022_cvpr_ld/ld_core_experiment/tests -v
 ## Hardware Profiles
 
 The experiment uses the `auto` profile by default and selects a conservative
-resize from the visible GPU memory. This lets the same code run on T4, V100,
-RTX3090, and smaller cards without editing model configs:
+resize from the visible GPU memory. The recorded V100S run used `tiny`
+(`640x384`), batch size 4, two data-loader workers, dynamic-loss-scale FP16,
+and one GPU. Its student runs remained well below the 32 GB device limit:
+
+```text
+Baseline training: approximately 812 MiB
+KD-only training:  approximately 1,189 MiB
+Full LD smoke test: approximately 506 MiB at batch size 1
+```
+
+The available profiles can be selected as follows:
 
 ```bash
 # 640x384, one sample, no data-loader workers
@@ -102,15 +140,14 @@ LD_PROFILE=low WORKERS_PER_GPU=0 \
   --teacher-checkpoint runs/teacher_r101/epoch_16.pth
 ```
 
-Select one GPU for this non-distributed MMCV runner:
+All wrappers expose `--gpu-id` because this non-distributed MMCV runner
+supports exactly one GPU:
 
 ```bash
 python scripts/train_baseline.py --gpu-id 0 --profile default
 ```
 
-Multiple `--gpu-ids` are rejected: MMCV 1.7.2's `MMDataParallel.train_step`
-requires a single GPU. Distributed multi-GPU launching is not implemented by
-these wrappers.
+Distributed multi-GPU launching is not implemented by these wrappers.
 
 ## Dataset
 
@@ -137,11 +174,12 @@ trainval split file is absent. Its merged `VOC2007/ImageSets/Main/trainval.txt`
 should contain about 16,551 training images, as stated in that dataset's
 description.
 
-The default is `2022_cvpr_ld/data/VOCdevkit`. Validate it with:
+The default is detected from either `2022_cvpr_ld/data/VOCdevkit` or
+`2022_cvpr_ld/data`, whichever contains `VOC2007/`. Validate it with:
 
 ```bash
 python 2022_cvpr_ld/ld_core_experiment/scripts/check_dataset.py \
-  --data-root /path/to/VOCdevkit
+  --data-root /path/to/VOCdevkit --full
 ```
 
 The low-resource configs use VOC2007+VOC2012 trainval and VOC2007 test, one
@@ -167,12 +205,13 @@ TEACHER_CHECKPOINT=/path/to/teacher/epoch_16.pth \
 ./run_smoke.sh
 ```
 
-## One-Epoch Mechanism Check
+## Completed One-Epoch Mechanism Check
 
-For a fast mechanism check, use one full pass over the combined VOC07+12
-training set, a smaller input, FP16, and offline evaluation. All student
-variants must share these settings so that the comparison isolates their
-distillation losses.
+The recorded mechanism check used one full pass over the combined VOC07+12
+training set, `640x384`, batch size 4 on one V100S, FP16, and offline
+evaluation. All student variants shared these settings so that the comparison
+isolates their distillation losses. `LD_REPEAT_TIMES=1` changes an epoch from
+the official three repeated passes to one pass over all 16,551 images.
 
 ```bash
 export VOC_DATA_ROOT=/path/to/VOCdevkit
@@ -183,21 +222,32 @@ TEACHER=/path/to/teacher_r101/epoch_1.pth
 
 TEACHER_CHECKPOINT="${TEACHER}" ./run_smoke.sh
 
-python scripts/train_baseline.py --epochs 1 --samples-per-gpu 4 \
-  --fp16 --no-validate
+python scripts/train_baseline.py --epochs 1 --repeat-times 1 \
+  --samples-per-gpu 4 --fp16 --no-validate --seed 0 --deterministic
 python scripts/train_ld.py --variant kd-only \
   --teacher-checkpoint "${TEACHER}" --epochs 1 \
-  --samples-per-gpu 4 --fp16 --no-validate
+  --repeat-times 1 --samples-per-gpu 4 --fp16 --no-validate \
+  --seed 0 --deterministic
 python scripts/train_ld.py --variant loc-only \
   --teacher-checkpoint "${TEACHER}" --epochs 1 \
-  --samples-per-gpu 4 --fp16 --no-validate
+  --repeat-times 1 --samples-per-gpu 4 --fp16 --no-validate \
+  --seed 0 --deterministic
 python scripts/train_ld.py --variant full \
   --teacher-checkpoint "${TEACHER}" --epochs 1 \
-  --samples-per-gpu 4 --fp16 --no-validate
+  --repeat-times 1 --samples-per-gpu 4 --fp16 --no-validate \
+  --seed 0 --deterministic
+python scripts/train_ld.py --variant main-ld-only \
+  --teacher-checkpoint "${TEACHER}" --epochs 1 \
+  --repeat-times 1 --samples-per-gpu 4 --fp16 --no-validate \
+  --seed 0 --deterministic
 ```
 
 This validates the distillation pipeline and directional trends. It is not a
 reproduction of the paper's COCO AP or its 12/16-epoch training schedules.
+The full protocol and measured VOC results are recorded in
+[`one_epoch_mechanism_results.md`](one_epoch_mechanism_results.md).
+Those recorded runs predate the seed and repeat-time CLI options; future runs
+use the explicit seed 0 shown above.
 
 ## Training Order
 
@@ -211,6 +261,11 @@ python scripts/train_teacher.py \
   --epochs 16 \
   --samples-per-gpu 1
 ```
+
+To initialize from a GFL COCO detector checkpoint before VOC fine-tuning,
+pass `--load-from /path/to/gfl_r101_coco.pth`. The 80-class classification
+head will not match the 20-class VOC head, but the backbone, neck, and matching
+head weights can still initialize the teacher.
 
 Then train the GFL-R18 student baseline:
 
@@ -235,9 +290,9 @@ python scripts/train_ld.py --variant full \
 ```
 
 The LD head uses the official `loss_kd`, `loss_ld`, and `loss_ld_vlr`
-implementations. `kd-only` disables both localization losses; `loc-only`
-disables classification KD; `full` retains all three. All variants retain the
-student's GT detection losses.
+implementations. `kd-only` disables both localization losses; `main-ld-only`
+uses Main LD without VLR; `loc-only` uses Main LD plus VLR LD; `full` retains
+all three. All variants retain the student's GT detection losses.
 
 Evaluate a checkpoint with the same config used for that run:
 
@@ -245,9 +300,27 @@ Evaluate a checkpoint with the same config used for that run:
 python scripts/evaluate_baseline.py \
   --config configs/gfl_r18_voc_baseline.py \
   --checkpoint runs/student_r18_baseline/epoch_4.pth \
-  --data-root /path/to/VOCdevkit
+  --data-root /path/to/VOCdevkit \
+  --profile tiny
 ```
 
 For an LD checkpoint, pass its matching `configs/ld_r18_voc_*.py` config and
-`--teacher-checkpoint` as well. The T4-oriented default is batch size 1; reduce
-the resize further if the teacher-student step runs out of memory.
+`--teacher-checkpoint` as well. The wrapper default remains batch size 1 for
+portability; the V100S mechanism run used batch size 4 at `640x384`.
+Evaluation stdout is saved automatically beside the checkpoint as
+`<config>_eval.log`; use `--log-file` to choose another path.
+
+For a direct student-teacher output comparison, run the deterministic
+distribution diagnostic:
+
+```bash
+python analysis/analyze_output_distances.py \
+  --config configs/ld_r18_voc_loc_only.py \
+  --checkpoint /path/to/mech_loc_only_run/epoch_1.pth \
+  --teacher-checkpoint /path/to/teacher_r101/epoch_1.pth \
+  --profile tiny
+```
+
+The script writes `output_distances.json` beside the student checkpoint and
+reports classification soft-label L1 plus four-edge localization
+distribution L1 at every FPN level.

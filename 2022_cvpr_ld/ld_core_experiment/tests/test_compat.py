@@ -13,8 +13,8 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 LD_ROOT = ROOT.parent / 'LD'
 sys.path.insert(0, str(ROOT / 'scripts'))
-from apply_ld_compat import PATCH_PATH, apply_patch, patch_state
-from install_environment import mmcv_wheel_index
+from apply_ld_compat import PATCH_PATH, apply_patch, patch_state  # noqa: E402
+from install_environment import mmcv_wheel_index  # noqa: E402
 
 
 class CompatibilityPatchTests(unittest.TestCase):

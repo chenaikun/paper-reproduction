@@ -1,4 +1,4 @@
-# PyTorch/torchvision come from the GPU image; prefer torch 2.0.1 + cu118.
+# PyTorch/torchvision come from the GPU image; use torch 2.0.x + cu118.
 # Use scripts/install_environment.py to select a matching MMCV wheel index.
 mmcv-full==1.7.2
 numpy==1.23.5

@@ -5,6 +5,9 @@ runs/
 __pycache__/
 *.pyc
 
+# OS metadata
+.DS_Store
+
 # Conda/虚拟环境
 env/
 venv/

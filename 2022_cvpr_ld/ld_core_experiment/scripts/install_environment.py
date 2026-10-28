@@ -21,7 +21,7 @@ REQUIREMENTS = ROOT / 'requirements.txt'
 def mmcv_wheel_index(torch_version, cuda_version):
     version = torch_version.split('+')[0].split('.')
     if tuple(version[:2]) not in (('2', '0'), ('2', '1')):
-        raise ValueError('Use PyTorch 2.0.x or 2.1.x; preferred: 2.0.1 + CUDA 11.8.')
+        raise ValueError('Use PyTorch 2.0.x or 2.1.x; compatible run: 2.0.x + CUDA 11.8.')
     if not cuda_version:
         raise ValueError('This installer requires a CUDA-enabled PyTorch build.')
     # OpenMMLab wheel indices use x.y.0 for all PyTorch x.y patch releases.
@@ -80,7 +80,7 @@ def main():
             except subprocess.CalledProcessError:
                 raise SystemExit(
                     'No usable MMCV wheel was installed. Check network/index above. '
-                    'Prefer torch 2.0.1 + cu118; if a wheel is unavailable, select '
+                    'Prefer torch 2.0.x + cu118; if a wheel is unavailable, select '
                     'a CUDA development image and retry with --build-mmcv. '
                     'No automatic source build was attempted.')
         # setup.py installs all declared runtime requirements; pass our pins as

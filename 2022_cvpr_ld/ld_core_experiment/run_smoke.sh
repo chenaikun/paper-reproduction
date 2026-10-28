@@ -4,7 +4,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python}"
-VOC_DATA_ROOT="${VOC_DATA_ROOT:-${PROJECT_ROOT}/data/VOCdevkit}"
+if [[ -z "${VOC_DATA_ROOT:-}" ]]; then
+  if [[ -d "${PROJECT_ROOT}/data/VOCdevkit/VOC2007" ]]; then
+    VOC_DATA_ROOT="${PROJECT_ROOT}/data/VOCdevkit"
+  else
+    VOC_DATA_ROOT="${PROJECT_ROOT}/data"
+  fi
+fi
 
 export VOC_DATA_ROOT
 export LD_PROFILE="${LD_PROFILE:-auto}"

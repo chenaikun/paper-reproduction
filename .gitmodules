@@ -1,3 +1,3 @@
 [submodule "2022_cvpr_ld/LD"]
 	path = 2022_cvpr_ld/LD
-	url = git@github.com:HikariTJU/LD.git
+	url = https://github.com/HikariTJU/LD.git
