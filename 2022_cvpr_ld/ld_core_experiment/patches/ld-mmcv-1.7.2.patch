@@ -1,0 +1,187 @@
+diff --git a/mmdet/__init__.py b/mmdet/__init__.py
+index 430cc55e..d689041b 100644
+--- a/mmdet/__init__.py
++++ b/mmdet/__init__.py
+@@ -15,14 +15,19 @@ def digit_version(version_str):
+     return digit_version
+ 
+ 
++# Keep the original range, plus the explicitly supported compatibility release.
++# Do not accept MMCV 2.x: it removed mmcv.runner and mmcv.parallel.
+ mmcv_minimum_version = '1.2.4'
+ mmcv_maximum_version = '1.3'
+ mmcv_version = digit_version(mmcv.__version__)
+-
+-
+-assert (mmcv_version >= digit_version(mmcv_minimum_version)
+-        and mmcv_version <= digit_version(mmcv_maximum_version)), \
+-    f'MMCV=={mmcv.__version__} is used but incompatible. ' \
+-    f'Please install mmcv>={mmcv_minimum_version}, <={mmcv_maximum_version}.'
++legacy_mmcv = (mmcv_version >= digit_version(mmcv_minimum_version)
++               and mmcv_version <= digit_version(mmcv_maximum_version))
++compat_mmcv = mmcv.__version__ == '1.7.2'
++
++assert legacy_mmcv or compat_mmcv, (
++    f'MMCV=={mmcv.__version__} is incompatible with this LD checkout. '
++    'Use mmcv-full==1.7.2 for the PyTorch 2.0/2.1 compatibility path, '
++    'or mmcv-full>=1.2.4,<=1.3 for the original stack. '
++    'MMCV 2.x / MMDetection 3.x are not supported.')
+ 
+ __all__ = ['__version__', 'short_version']
+diff --git a/mmdet/apis/train.py b/mmdet/apis/train.py
+index 82c20bff..3dc943c3 100644
+--- a/mmdet/apis/train.py
++++ b/mmdet/apis/train.py
+@@ -41,7 +41,7 @@ def train_detector(model,
+                    validate=False,
+                    timestamp=None,
+                    meta=None):
+-    logger = get_root_logger(cfg.log_level)
++    logger = get_root_logger(log_level=cfg.log_level)
+ 
+     # prepare data loaders
+     dataset = dataset if isinstance(dataset, (list, tuple)) else [dataset]
+diff --git a/mmdet/core/bbox/samplers/iou_balanced_neg_sampler.py b/mmdet/core/bbox/samplers/iou_balanced_neg_sampler.py
+index f275e430..60e23c01 100644
+--- a/mmdet/core/bbox/samplers/iou_balanced_neg_sampler.py
++++ b/mmdet/core/bbox/samplers/iou_balanced_neg_sampler.py
+@@ -72,7 +72,7 @@ class IoUBalancedNegSampler(RandomSampler):
+                 tmp_sampled_set = self.random_choice(tmp_inds,
+                                                      per_num_expected)
+             else:
+-                tmp_sampled_set = np.array(tmp_inds, dtype=np.int)
++                tmp_sampled_set = np.array(tmp_inds, dtype=np.int64)
+             sampled_inds.append(tmp_sampled_set)
+ 
+         sampled_inds = np.concatenate(sampled_inds)
+@@ -137,13 +137,13 @@ class IoUBalancedNegSampler(RandomSampler):
+                         iou_sampling_neg_inds, num_expected_iou_sampling)
+             else:
+                 iou_sampled_inds = np.array(
+-                    iou_sampling_neg_inds, dtype=np.int)
++                    iou_sampling_neg_inds, dtype=np.int64)
+             num_expected_floor = num_expected - len(iou_sampled_inds)
+             if len(floor_neg_inds) > num_expected_floor:
+                 sampled_floor_inds = self.random_choice(
+                     floor_neg_inds, num_expected_floor)
+             else:
+-                sampled_floor_inds = np.array(floor_neg_inds, dtype=np.int)
++                sampled_floor_inds = np.array(floor_neg_inds, dtype=np.int64)
+             sampled_inds = np.concatenate(
+                 (sampled_floor_inds, iou_sampled_inds))
+             if len(sampled_inds) < num_expected:
+diff --git a/mmdet/core/evaluation/mean_ap.py b/mmdet/core/evaluation/mean_ap.py
+index cd881148..750fdc09 100644
+--- a/mmdet/core/evaluation/mean_ap.py
++++ b/mmdet/core/evaluation/mean_ap.py
+@@ -80,8 +80,8 @@ def tpfp_imagenet(det_bboxes,
+     """
+     # an indicator of ignored gts
+     gt_ignore_inds = np.concatenate(
+-        (np.zeros(gt_bboxes.shape[0], dtype=np.bool),
+-         np.ones(gt_bboxes_ignore.shape[0], dtype=np.bool)))
++        (np.zeros(gt_bboxes.shape[0], dtype=np.bool_),
++         np.ones(gt_bboxes_ignore.shape[0], dtype=np.bool_)))
+     # stack gt_bboxes and gt_bboxes_ignore for convenience
+     gt_bboxes = np.vstack((gt_bboxes, gt_bboxes_ignore))
+ 
+@@ -173,8 +173,8 @@ def tpfp_default(det_bboxes,
+     """
+     # an indicator of ignored gts
+     gt_ignore_inds = np.concatenate(
+-        (np.zeros(gt_bboxes.shape[0], dtype=np.bool),
+-         np.ones(gt_bboxes_ignore.shape[0], dtype=np.bool)))
++        (np.zeros(gt_bboxes.shape[0], dtype=np.bool_),
++         np.ones(gt_bboxes_ignore.shape[0], dtype=np.bool_)))
+     # stack gt_bboxes and gt_bboxes_ignore for convenience
+     gt_bboxes = np.vstack((gt_bboxes, gt_bboxes_ignore))
+ 
+diff --git a/mmdet/core/mask/structures.py b/mmdet/core/mask/structures.py
+index 59d8b857..46a1b1f0 100644
+--- a/mmdet/core/mask/structures.py
++++ b/mmdet/core/mask/structures.py
+@@ -211,7 +211,7 @@ class BitmapMasks(BaseInstanceMasks):
+         >>> from mmdet.core.mask.structures import *  # NOQA
+         >>> num_masks, H, W = 3, 32, 32
+         >>> rng = np.random.RandomState(0)
+-        >>> masks = (rng.rand(num_masks, H, W) > 0.1).astype(np.int)
++        >>> masks = (rng.rand(num_masks, H, W) > 0.1).astype(np.int64)
+         >>> self = BitmapMasks(masks, height=H, width=W)
+ 
+         >>> # demo crop_and_resize
+@@ -755,7 +755,7 @@ class PolygonMasks(BaseInstanceMasks):
+         """Translate the PolygonMasks.
+ 
+         Example:
+-            >>> self = PolygonMasks.random(dtype=np.int)
++            >>> self = PolygonMasks.random(dtype=np.int64)
+             >>> out_shape = (self.height, self.width)
+             >>> new = self.translate(out_shape, 4., direction='horizontal')
+             >>> assert np.all(new.masks[0][0][1::2] == self.masks[0][0][1::2])
+@@ -1033,5 +1033,5 @@ def polygon_to_bitmap(polygons, height, width):
+     """
+     rles = maskUtils.frPyObjects(polygons, height, width)
+     rle = maskUtils.merge(rles)
+-    bitmap_mask = maskUtils.decode(rle).astype(np.bool)
++    bitmap_mask = maskUtils.decode(rle).astype(np.bool_)
+     return bitmap_mask
+diff --git a/mmdet/datasets/coco.py b/mmdet/datasets/coco.py
+index 9eea6a4f..eab2e65f 100644
+--- a/mmdet/datasets/coco.py
++++ b/mmdet/datasets/coco.py
+@@ -15,15 +15,9 @@ from mmdet.core import eval_recalls
+ from .builder import DATASETS
+ from .custom import CustomDataset
+ 
+-try:
+-    import pycocotools
+-    if not hasattr(pycocotools, '__sphinx_mock__'):  # for doc generation
+-        assert pycocotools.__version__ >= '12.0.2'
+-except AssertionError:
+-    raise AssertionError('Incompatible version of pycocotools is installed. '
+-                         'Run pip uninstall pycocotools first. Then run pip '
+-                         'install mmpycocotools to install open-mmlab forked '
+-                         'pycocotools.')
++# The maintained pycocotools package provides the COCO/COCOeval/mask APIs
++# used here. Do not require the abandoned mmpycocotools fork's version tag:
++# modern pycocotools may not expose __version__ at all.
+ 
+ 
+ @DATASETS.register_module()
+diff --git a/mmdet/datasets/custom.py b/mmdet/datasets/custom.py
+index 55cc78fb..3cf5405f 100644
+--- a/mmdet/datasets/custom.py
++++ b/mmdet/datasets/custom.py
+@@ -137,7 +137,7 @@ class CustomDataset(Dataset):
+             list[int]: All categories in the image of specified index.
+         """
+ 
+-        return self.data_infos[idx]['ann']['labels'].astype(np.int).tolist()
++        return self.data_infos[idx]['ann']['labels'].astype(np.int64).tolist()
+ 
+     def pre_pipeline(self, results):
+         """Prepare results dict for pipeline."""
+diff --git a/mmdet/models/roi_heads/bbox_heads/bbox_head.py b/mmdet/models/roi_heads/bbox_heads/bbox_head.py
+index 5d3e7fd4..6fc4a3f9 100644
+--- a/mmdet/models/roi_heads/bbox_heads/bbox_head.py
++++ b/mmdet/models/roi_heads/bbox_heads/bbox_head.py
+@@ -343,7 +343,7 @@ class BBoxHead(nn.Module):
+             >>> labels = torch.randint(0, 2, (n_roi,)).long()
+             >>> bbox_preds = random_boxes(n_roi, scale=scale, rng=rng)
+             >>> # For each image, pretend random positive boxes are gts
+-            >>> is_label_pos = (labels.numpy() > 0).astype(np.int)
++            >>> is_label_pos = (labels.numpy() > 0).astype(np.int64)
+             >>> lbl_per_img = kwarray.group_items(is_label_pos,
+             ...                                   img_ids.numpy())
+             >>> pos_per_img = [sum(lbl_per_img.get(gid, []))
+diff --git a/requirements/runtime.txt b/requirements/runtime.txt
+index 8eb0c3db..c1dbe1e8 100644
+--- a/requirements/runtime.txt
++++ b/requirements/runtime.txt
+@@ -1,5 +1,5 @@
+ matplotlib
+-mmpycocotools
++pycocotools>=2.0.7
+ numpy
+ six
+ terminaltables

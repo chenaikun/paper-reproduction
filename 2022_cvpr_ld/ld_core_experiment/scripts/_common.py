@@ -99,6 +99,10 @@ def require_ld_checkout():
         raise SystemExit(
             'Official LD submodule is missing. Run '
             '`git submodule update --init --recursive` from the repository root.')
+    from apply_ld_compat import apply_patch
+    if apply_patch(check_only=True) != 'applied':
+        raise SystemExit(
+            'LD compatibility patch missing. Run python scripts/apply_ld_compat.py.')
     return train_tool
 
 
@@ -106,6 +110,10 @@ def run_train(config, work_dir, env, gpu_ids='0', epochs=None,
               resume_from=None, no_validate=False):
     train_tool = require_ld_checkout()
     normalized_gpu_ids = _normalize_gpu_ids(gpu_ids)
+    if len(normalized_gpu_ids) != 1:
+        raise SystemExit(
+            'This MMCV runner supports one GPU per process. Select one --gpu-id; '
+            'multi-GPU training requires a separate distributed launcher.')
     command = [
         sys.executable,
         str(train_tool),
@@ -124,8 +132,7 @@ def run_train(config, work_dir, env, gpu_ids='0', epochs=None,
 
 def run_test(config, checkpoint, env, output=None):
     test_tool = LD_ROOT / 'tools' / 'test.py'
-    if not test_tool.is_file():
-        require_ld_checkout()
+    require_ld_checkout()
     command = [
         sys.executable,
         str(test_tool),

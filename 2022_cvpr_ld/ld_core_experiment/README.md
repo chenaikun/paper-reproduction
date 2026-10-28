@@ -7,51 +7,73 @@ points. Do not install the MMDetection 3 stack in this environment.
 
 ## Environment
 
-The original LD guide targets Python 3.7, PyTorch 1.7, CUDA 11.0, and
-`mmcv-full==1.2.7`. The default experiment environment is now the modern
-compatibility path: PyTorch 2.0/2.1 with `mmcv-full==1.7.2`, while retaining the
-official MMDetection 2.10 LD code and APIs. Do not install MMCV 2.x or the
-MMDetection 3 stack for this checkout.
+Use Linux x86_64, Python 3.8/3.9 (3.10 also accepted), PyTorch **2.0.1**,
+torchvision **0.15.2**, CUDA **11.8**, and **mmcv-full 1.7.2**. PyTorch 2.1.x
+is an alternate compatibility target, not a promise that every CUDA/Python
+combination has a prebuilt MMCV wheel. Do not install MMCV 2.x or MMDetection
+3.x. One V100S 32GB or RTX 3090/4090 24GB is a reasonable starting point;
+actual memory use must be checked with the smoke test.
 
-If the project was cloned from Git, initialize the official source first:
+From the repository root, after choosing a CUDA-enabled PyTorch image:
 
 ```bash
 git submodule update --init --recursive
-```
-
-```bash
-# Run these commands inside a platform PyTorch 2.0 or 2.1 environment.
-# Verify the preinstalled versions before changing anything:
 python -c "import torch; print(torch.__version__, torch.version.cuda)"
-python -m pip install -U openmim
-python -m pip uninstall -y mmcv mmcv-lite mmcv-full
-mim install "mmcv-full==1.7.2"
-python -m pip install -v -e ./2022_cvpr_ld/LD
+python 2022_cvpr_ld/ld_core_experiment/scripts/install_environment.py
 ```
 
-`mmcv-full==1.7.2` is preferred for the PyTorch 2.x path because its published
-packages cover PyTorch 2.0/2.1. If no matching package exists for the exact
-platform CUDA build, install it from source and check that the CUDA toolkit is
-available:
+The installer:
+
+1. Applies `patches/ld-mmcv-1.7.2.patch` to the bundled LD source, idempotently.
+   This patch is tracked **in the parent repository** so a fresh cloud clone
+   gets the same fixes, without needing to push commits to the official LD repo.
+2. Pins NumPy, YAPF (MMCV's `verify=True` formatting API), OpenCV and COCO
+   dependencies; replaces the abandoned `mmpycocotools` dependency/check with
+   maintained `pycocotools`; keeps the original LD loss/model implementations.
+3. Removes conflicting MMCV distributions, then requires a matching binary
+   `mmcv-full` wheel from the PyTorch/CUDA-specific OpenMMLab index. It does
+   **not** silently start compiling when no wheel exists.
+4. Installs the patched local LD checkout in editable mode and executes CPU
+   and CUDA NMS plus ROIAlign forward/backward, model registration and config
+   formatting checks.
+
+A compiler or wheel-index/network failure is an installation failure, not a
+successful environment check. If a matching wheel is unavailable, use a CUDA
+**development** image (not runtime-only), check that `nvcc --version` matches
+`torch.version.cuda`, then explicitly opt into compilation:
 
 ```bash
-nvcc --version
+python 2022_cvpr_ld/ld_core_experiment/scripts/install_environment.py --build-mmcv
 ```
 
-If `nvcc` is absent, select an NVIDIA CUDA development image rather than a
-runtime-only image. The PyTorch CUDA runtime alone is not enough to compile
-MMCV's operators.
+To reapply/check only the source patch (no Python dependencies required):
 
-Check the installed stack and GPU before training:
+```bash
+python 2022_cvpr_ld/ld_core_experiment/scripts/apply_ld_compat.py
+python 2022_cvpr_ld/ld_core_experiment/scripts/apply_ld_compat.py --check
+```
+
+Patch conflicts stop without changing source files; do not discard your own
+LD edits to force installation. A modified/dirty LD submodule after patching
+is expected. Commit the parent experiment's patch/script files, **not** a new
+LD gitlink pointing to an unpublished local commit.
+
+Run environment checks again before training:
 
 ```bash
 python 2022_cvpr_ld/ld_core_experiment/scripts/check_environment.py --require-cuda
 ```
 
-The check rejects MMDetection 3, MMCV 2, unsupported PyTorch versions, or a
-different imported `mmdet` checkout so the scripts do not silently run against
-the wrong API. The original environment is still available with
-`requirements-legacy.txt` if exact paper-era reproduction is required.
+Operator checks do not replace a real teacher/student training step. The
+single-step VOC checks below still require a GPU, data, and (for LD) a trained
+teacher checkpoint. The `requirements-legacy.txt` file records the old MMCV
+reference only; the installer/checker above target the modern stack.
+
+Dependency-free patch regression tests can run on a development laptop:
+
+```bash
+python -m unittest discover -s 2022_cvpr_ld/ld_core_experiment/tests -v
+```
 
 ## Hardware Profiles
 
@@ -80,11 +102,15 @@ LD_PROFILE=low WORKERS_PER_GPU=0 \
   --teacher-checkpoint runs/teacher_r101/epoch_16.pth
 ```
 
-Multiple visible GPUs can be selected without changing the configs:
+Select one GPU for this non-distributed MMCV runner:
 
 ```bash
-python scripts/train_baseline.py --gpu-ids 0,1 --profile default
+python scripts/train_baseline.py --gpu-id 0 --profile default
 ```
+
+Multiple `--gpu-ids` are rejected: MMCV 1.7.2's `MMDataParallel.train_step`
+requires a single GPU. Distributed multi-GPU launching is not implemented by
+these wrappers.
 
 ## Dataset
 

@@ -10,6 +10,7 @@ export VOC_DATA_ROOT
 export LD_PROFILE="${LD_PROFILE:-auto}"
 export WORKERS_PER_GPU="${WORKERS_PER_GPU:-0}"
 
+"${PYTHON_BIN}" "${SCRIPT_DIR}/scripts/apply_ld_compat.py" --check
 "${PYTHON_BIN}" "${SCRIPT_DIR}/scripts/check_environment.py" --require-cuda
 "${PYTHON_BIN}" "${SCRIPT_DIR}/scripts/check_dataset.py" \
   --data-root "${VOC_DATA_ROOT}"

@@ -1,4 +1,12 @@
-# Modern compatibility path for the bundled MMDetection 2.10 LD code.
-# PyTorch is supplied by the platform image. MMCV 1.7.2 keeps the mmcv.runner
-# API used by this checkout and provides wheels for PyTorch 2.0/2.1.
+# PyTorch/torchvision come from the GPU image; prefer torch 2.0.1 + cu118.
+# Use scripts/install_environment.py to select a matching MMCV wheel index.
 mmcv-full==1.7.2
+numpy==1.23.5
+# MMCV Config.pretty_text uses FormatCode(..., verify=True).
+yapf==0.40.1
+opencv-python==4.8.1.78
+pycocotools==2.0.7
+scipy>=1.7,<1.12
+matplotlib>=3.3,<3.8
+terminaltables==3.1.10
+six>=1.15
