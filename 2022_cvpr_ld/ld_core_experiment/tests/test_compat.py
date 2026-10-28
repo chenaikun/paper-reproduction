@@ -23,7 +23,8 @@ class CompatibilityPatchTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.checkout = Path(self.temp.name) / 'LD'
         self.checkout.mkdir()
-        self.paths = re.findall(r'^diff --git a/(.*?) b/', PATCH_PATH.read_text(), re.M)
+        self.paths = re.findall(
+            r'^diff --git a/(.*?) b/', PATCH_PATH.read_text(encoding='utf-8'), re.M)
         for relative in self.paths:
             target = self.checkout / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -76,13 +77,19 @@ class CompatibilityPatchTests(unittest.TestCase):
         apply_patch(self.checkout)
         for relative in self.paths:
             if relative.endswith('.py'):
-                source = (self.checkout / relative).read_text()
+                source = (self.checkout / relative).read_text(encoding='utf-8')
                 compile(source, relative, 'exec')
                 self.assertIsNone(re.search(r'\bnp\.(bool|int)\b', source), relative)
         self.assertIn('get_root_logger(log_level=cfg.log_level)',
-                      (self.checkout / 'mmdet/apis/train.py').read_text())
+                      (self.checkout / 'mmdet/apis/train.py').read_text(
+                          encoding='utf-8'))
         self.assertNotIn('mmpycocotools',
-                         (self.checkout / 'requirements/runtime.txt').read_text())
+                         (self.checkout / 'requirements/runtime.txt').read_text(
+                             encoding='utf-8'))
+        self.assertIn(
+            'device=multi_scores.device',
+            (self.checkout / 'mmdet/core/post_processing/bbox_nms.py').read_text(
+                encoding='utf-8'))
 
     def test_missing_checkout_has_actionable_error(self):
         with self.assertRaisesRegex(RuntimeError, 'submodule update'):

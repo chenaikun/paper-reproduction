@@ -167,6 +167,38 @@ TEACHER_CHECKPOINT=/path/to/teacher/epoch_16.pth \
 ./run_smoke.sh
 ```
 
+## One-Epoch Mechanism Check
+
+For a fast mechanism check, use one full pass over the combined VOC07+12
+training set, a smaller input, FP16, and offline evaluation. All student
+variants must share these settings so that the comparison isolates their
+distillation losses.
+
+```bash
+export VOC_DATA_ROOT=/path/to/VOCdevkit
+export LD_PROFILE=tiny
+export LD_REPEAT_TIMES=1
+export WORKERS_PER_GPU=2
+TEACHER=/path/to/teacher_r101/epoch_1.pth
+
+TEACHER_CHECKPOINT="${TEACHER}" ./run_smoke.sh
+
+python scripts/train_baseline.py --epochs 1 --samples-per-gpu 4 \
+  --fp16 --no-validate
+python scripts/train_ld.py --variant kd-only \
+  --teacher-checkpoint "${TEACHER}" --epochs 1 \
+  --samples-per-gpu 4 --fp16 --no-validate
+python scripts/train_ld.py --variant loc-only \
+  --teacher-checkpoint "${TEACHER}" --epochs 1 \
+  --samples-per-gpu 4 --fp16 --no-validate
+python scripts/train_ld.py --variant full \
+  --teacher-checkpoint "${TEACHER}" --epochs 1 \
+  --samples-per-gpu 4 --fp16 --no-validate
+```
+
+This validates the distillation pipeline and directional trends. It is not a
+reproduction of the paper's COCO AP or its 12/16-epoch training schedules.
+
 ## Training Order
 
 Train the R101 teacher first. The config uses ImageNet initialization and the

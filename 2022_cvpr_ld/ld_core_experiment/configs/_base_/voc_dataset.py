@@ -53,6 +53,9 @@ def build_voc_overrides(project_root):
     SAMPLES_PER_GPU = _env_int('SAMPLES_PER_GPU', PROFILE['samples_per_gpu'])
     WORKERS_PER_GPU = _env_int('WORKERS_PER_GPU', PROFILE['workers'])
     GPU_COUNT = _env_int('GPU_COUNT', 1)
+    REPEAT_TIMES = _env_int('LD_REPEAT_TIMES', 3)
+    if REPEAT_TIMES < 1:
+        raise ValueError('LD_REPEAT_TIMES must be at least 1')
 
     dataset_type = 'VOCDataset'
     img_norm_cfg = dict(
@@ -105,7 +108,7 @@ def build_voc_overrides(project_root):
         workers_per_gpu=WORKERS_PER_GPU,
         train=dict(
             type='RepeatDataset',
-            times=3,
+            times=REPEAT_TIMES,
             dataset=dict(
                 type=dataset_type,
                 ann_file=TRAIN_ANN_FILE,
