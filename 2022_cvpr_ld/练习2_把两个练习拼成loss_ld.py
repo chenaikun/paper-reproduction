@@ -224,14 +224,8 @@ def kd_loss(pred_logits, soft_logits, T, weight=None, avg_factor=None):
     return loss.sum() / avg_factor
 
 
-def demo3_full():
-    print("=" * 60)
-    print("第 3 步：拼成一个 80 个 anchor 的迷你 loss_ld")
-    print("=" * 60)
-
-    torch.manual_seed(0)
-
-    # 造 80 个 anchor：两层特征图（stride 8 的 8×8，stride 16 的 4×4），中心铺满 64×64 的图
+def build_scene(gts=None):
+    """造一个统一的场景：80 个 anchor + 一个 GT。"""
     centers = []
     for stride, size in ((8, 8), (16, 4)):
         for i in range(size):
@@ -239,8 +233,19 @@ def demo3_full():
                 cx, cy = (j + 0.5) * stride, (i + 0.5) * stride
                 half = 4 * stride          # GFL 的 anchor 边长 = 8 × stride
                 centers.append([cx - half, cy - half, cx + half, cy + half])
-    anchors = torch.tensor(centers)        # (80, 4)
-    gts = torch.tensor([[10., 10., 50., 50.]])   # 一个 40×40 的目标
+    if gts is None:
+        gts = torch.tensor([[10., 10., 50., 50.]])
+    return torch.tensor(centers), gts
+
+
+def demo3_full():
+    print("=" * 60)
+    print("第 3 步：拼成一个 80 个 anchor 的迷你 loss_ld")
+    print("=" * 60)
+
+    torch.manual_seed(0)
+
+    anchors, gts = build_scene()          # (80, 4) 和 (1, 4)
 
     # 每个 anchor 的"真值距离"（4 条边），单位是 stride；模拟教师和学生的 17 维分布
     bin_count = 17                          # reg_max=16 → 0~16 共 17 个格子
@@ -311,7 +316,266 @@ def demo3_full():
     print("  avg_factor   → 归一化分母        （第 3 步）")
 
 
+def demo4_pos_vs_vlr():
+    """正样本 和 VLR 到底是不是同一批锚点？"""
+    print("=" * 60)
+    print("第 4 步：正样本 vs VLR，到底是不是一回事")
+    print("=" * 60)
+
+    torch.manual_seed(0)
+    # 玩具场景只有 2 个尺度，真实模型有 5 个。这里用 IoU ≥ 阈值 近似 ATSS 的正样本
+    # （真实 ATSS 还多一个条件：锚点中心必须落在 GT 内部）
+    anchors, gts = build_scene(torch.tensor([[13., 17., 47., 49.]]))
+    iou, diou = pairwise_iou_diou(anchors, gts)
+
+    topk_iou, _ = iou.topk(9, dim=0)
+    thr = (topk_iou.mean(dim=0) + topk_iou.std(dim=0, unbiased=False))[0]
+
+    pos_mask = iou[:, 0] >= thr
+    vlr_val, _, _ = vlr_region(anchors, gts, topk=9, a=0.25)
+    vlr_mask = vlr_val > 0
+
+    pos_set = set(pos_mask.nonzero().squeeze(1).tolist())
+    vlr_set = set(vlr_mask.nonzero().squeeze(1).tolist())
+    both = pos_set & vlr_set
+
+    print(f"阈值 thr          : {thr:.4f}")
+    print(f"正样本 pos_inds   : {len(pos_set):>3} 个   （判据：IoU ≥ thr；真实 ATSS 还要求中心在 GT 内）")
+    print(f"VLR  remain_inds  : {len(vlr_set):>3} 个   （判据：0.25·thr ≤ DIoU < thr）")
+    print(f"  两个都是        : {len(both):>3} 个")
+    print(f"  只有 VLR 有      : {len(vlr_set - pos_set):>3} 个   ← 这些根本不是正样本")
+    print(f"  只有正样本有      : {len(pos_set - vlr_set):>3} 个")
+    print(f"  都是背景        : {anchors.size(0) - len(pos_set | vlr_set):>3} 个")
+    print()
+
+    print("前 6 个正样本（IoU 最高的那批）：")
+    print(f"  {'#':>3}  {'IoU':>6}  {'DIoU':>6}   在 VLR 里吗")
+    for k in sorted(pos_set, key=lambda i: -iou[i, 0].item())[:6]:
+        print(f"  {k:>3}  {iou[k,0].item():>6.3f}  {diou[k,0].item():>6.3f}   "
+              f"{'是（重叠，官方不互斥）' if k in vlr_set else '否'}")
+
+    print()
+    print("前 6 个『只在 VLR 里』的锚点（它们不是正样本）：")
+    print(f"  {'#':>3}  {'IoU':>6}  {'DIoU':>6}   角色")
+    only_vlr = sorted(vlr_set - pos_set, key=lambda i: -iou[i, 0].item())
+    for k in only_vlr[:6]:
+        print(f"  {k:>3}  {iou[k,0].item():>6.3f}  {diou[k,0].item():>6.3f}   "
+              f"VLR → 只走 loss_ld_vlr")
+
+    # ---------- 为什么正样本也会落进 VLR ----------
+    print()
+    print("为什么『正样本』也能落进 VLR：因为两个门槛比的不是同一个数")
+    print("  正样本的判据：IoU  ≥ thr")
+    print("  VLR 的判据  ：DIoU < thr")
+    print("  而 DIoU = IoU − ρ²/c²  ≤  IoU   （ρ 是中心距离，c 是最小外接矩形的对角线）")
+    print()
+    print("  所以只要『中心偏移的惩罚』大于『IoU 高出阈值的余量』，")
+    print("  一个锚点就会同时满足 IoU ≥ thr 和 DIoU < thr。")
+    print()
+    print(f"  {'#':>3}  {'IoU':>6}  {'DIoU':>6}  {'thr':>6}  {'余量':>8}  {'惩罚':>8}  结果")
+    overlap = sorted(both, key=lambda i: -iou[i, 0].item())[:6]
+    rows = []
+    for k in overlap:
+        margin = iou[k, 0].item() - thr.item()          # IoU 高出阈值多少
+        penalty = iou[k, 0].item() - diou[k, 0].item()  # 中心偏移扣掉多少
+        rows.append((k, margin, penalty))
+        verdict = "惩罚 > 余量 → 掉进 VLR" if penalty > margin else "惩罚 < 余量 → 不进 VLR"
+        print(f"  {k:>3}  {iou[k,0].item():>6.4f}  {diou[k,0].item():>6.4f}  "
+              f"{thr.item():>6.4f}  {margin:>8.4f}  {penalty:>8.4f}  {verdict}")
+    print()
+    if rows:
+        k0, m0, p0 = rows[0]
+        print(f"  看第 1 行（锚点 {k0}）：IoU 只比阈值高 {m0:.6f}（几乎就是刚好过线），"
+              f"但中心偏移扣掉了 {p0:.4f}，")
+        print(f"  所以 DIoU 从 {thr.item() + m0:.4f} 掉到 {thr.item() + m0 - p0:.4f}，落在窗口里 ——")
+        print("  它既是正样本，又在 VLR 里。")
+    print("  真实训练里尺度有 5 个、IoU 拉得开，正样本的『余量』通常远大于『惩罚』，")
+    print("  所以重叠少；但边界附近的锚点仍然可能两种都算。")
+
+    print()
+    print("把这两个概念纠正一下：")
+    print("  ① 正样本 ≠『所有和 GT 相关的锚点』")
+    print("     正样本是 ATSS 判出来的：中心在 GT 内 + IoU 超过自适应阈值。")
+    print("     一张图通常只有几十个。而 VLR 锚点也和 GT 相关，但它们是另一批。")
+    print()
+    print("  ② VLR ≠『正样本的一部分』——反了，也错了")
+    print(f"     这个例子里 {len(vlr_set)} 个 VLR 锚点中有 {len(vlr_set - pos_set)} 个完全不是正样本。")
+    print("     判据也不一样：正样本看 IoU，VLR 看 DIoU 且要求『低于阈值』。")
+    print("     VLR 的数量一般是正样本的好几倍，所以它才是定位蒸馏的主力。")
+    print()
+    print("  ③ 两者可以重叠，官方没有互斥")
+    print("     pos_inds 和 remain_inds 是各自独立算出来的，没有『减去正样本』这一步。")
+    print("     这个玩具场景里正样本恰好都落进了 VLR 窗口（阈值被算得偏高），")
+    print("     真实 ATSS 里正样本 IoU 通常明显高于阈值，重叠会少一些，但确实可能发生。")
+    print()
+    print("  ④ 各自喂给不同的 loss：")
+    print("     pos_inds    → loss_cls / loss_bbox / loss_dfl / loss_ld / loss_kd")
+    print("     remain_inds → loss_ld_vlr")
+    print("     另外：remain_inds 这个名字里的 remain 不是『正样本剩下的』，别被名字骗了。")
+    print()
+
+
+def demo5_anchor_scale():
+    """锚点尺寸和目的大小怎么配对，以及为什么 IoU 会拉得很开。"""
+    print("=" * 60)
+    print("第 5 步：锚点尺寸和目标大小，是怎么配对的")
+    print("=" * 60)
+
+    # GFL 的真实设置：octave_base_scale=8，scales_per_octave=1，strides=[8,16,32,64,128]
+    # 每个格子放一个正方形锚点，边长 = 8 × stride
+    strides = [8, 16, 32, 64, 128]
+    anchor_sides = [8 * s for s in strides]
+    print(f"GFL 的 5 层锚点边长 = {anchor_sides} 像素")
+    print(f"（配置里 octave_base_scale=8，所以低层锚点小、高层锚点大）")
+    print()
+
+    # IoU 的上限只由面积决定：
+    #   · 锚点比目标小（完全被目标包住）→ IoU 最大 = 锚点面积 / 目标面积
+    #   · 锚点比目标大（完全包住目标）  → IoU 最大 = 目标面积 / 锚点面积
+    # 注意这是"上限"，实际因为中心位置、长宽比不同，只会更低
+    gt_sides = [16, 32, 64, 128, 256, 512]
+
+    header = "目标边长 ↓ | 锚点 →" + "".join(f"{a:>9}" for a in anchor_sides)
+    print(header)
+    print("-" * len(header))
+    for gt in gt_sides:
+        row = f"{gt:>9}    |         "
+        for a in anchor_sides:
+            area_gt, area_a = gt * gt, a * a
+            ceiling = min(area_gt, area_a) / max(area_gt, area_a)
+            row += f"{ceiling:>9.3f}"
+        print(row)
+
+    print()
+    print("读法：每一格是这个目标配这个锚点时，IoU 能达到的『上限』")
+    print("  · 对角线附近（目标边长≈锚点边长）→ IoU 上限接近 1")
+    print("  · 左下角（大目标配小锚点）      → IoU 上限趋近 0")
+    print("  · 右上角（小目标配大锚点）      → IoU 上限也趋近 0")
+    print()
+
+    print("举两个具体的：")
+    print(f"  · 512×512 的大目标，配上 64×64 的小锚点：")
+    print(f"    IoU 最多 = 64²/512² = {64*64/(512*512):.4f}（锚点整个被目标包住，也只能到 0.016）")
+    print(f"  · 16×16 的小目标，配上 1024×1024 的大锚点：")
+    print(f"    IoU 最多 = 16²/1024² = {16*16/(1024*1024):.6f}（几乎就是 0）")
+    print()
+
+    print("所以真实模型里，同一个 GT 的 5 层候选锚点：")
+    print("  · 1 层尺寸正好匹配 → IoU 能到 0.5~0.9")
+    print("  · 其余 4 层尺寸差太远 → IoU 只有 0.0x，甚至 0.00x")
+    print()
+    print("这就是为什么 thr = 均值 + 标准差 会明显低于最好的那几个：")
+    print("  均值被那 4 层『低分但不算太低』的候选拉下来了，")
+    print("  于是尺度匹配的那几个锚点『余量』很大。")
+    print()
+
+
+def demo6_atss_threshold():
+    """按 ATSS 的真实流程走一遍：候选怎么选、阈值怎么算、正样本怎么定。"""
+    print("=" * 60)
+    print("第 6 步：ATSS 的 45 个候选和自适应阈值")
+    print("=" * 60)
+
+    img = 640
+    gt = torch.tensor([[200., 200., 320., 320.]])   # 一个 120×120 的目标
+    strides = [8, 16, 32, 64, 128]
+    topk = 9
+
+    # ---------- 造 5 层锚点 ----------
+    anchors_per_level, sizes = [], []
+    for stride in strides:
+        n = img // stride
+        ys, xs = torch.meshgrid(torch.arange(n), torch.arange(n), indexing='ij')
+        cx = (xs + 0.5) * stride
+        cy = (ys + 0.5) * stride
+        half = 4 * stride                     # 锚点边长 = 8 × stride
+        boxes = torch.stack([cx - half, cy - half, cx + half, cy + half],
+                            dim=-1).reshape(-1, 4)
+        anchors_per_level.append(boxes)
+        sizes.append(boxes.size(0))
+    anchors = torch.cat(anchors_per_level)    # 全部锚点
+    print(f"5 层锚点总数 = {anchors.size(0)} 个（每层 {sizes}）")
+    print()
+
+    # ---------- 第 0 步：先说清坐标系 ----------
+    print("第 0 步：锚点和 GT 在同一个坐标系 —— 输入图的像素坐标")
+    stride2, boxes2 = 16, anchors_per_level[1]        # 第 2 层：40×40 特征图，锚点 128×128
+    n2 = img // stride2
+    print(f"  第 2 层的特征图是 {n2}×{n2}（640/16），每个格子对应输入图 {stride2}×{stride2} 像素")
+    print(f"  锚点边长 128 = 8 个格子的宽度（8 × stride），不是特征图上的 128 格")
+    print()
+    print(f"  {'格子(行,列)':>12}  {'中心(输入图)':>14}  {'锚点框(输入图)':>28}  {'IoU':>6}")
+    for i, j in [(15, 15), (16, 16), (11, 11)]:
+        cx, cy = (j + 0.5) * stride2, (i + 0.5) * stride2
+        half = 4 * stride2
+        box = torch.tensor([[cx - half, cy - half, cx + half, cy + half]])
+        iou_ij, _ = pairwise_iou_diou(box, gt)
+        print(f"  ({i:>2},{j:>2}){'':>4}  ({cx:>5.0f},{cy:>5.0f}){'':>3}  "
+              f"[{cx-half:>5.0f},{cy-half:>5.0f},{cx+half:>5.0f},{cy+half:>5.0f}]{'':>4}  "
+              f"{iou_ij[0,0].item():>6.3f}")
+    print()
+    print(f"  GT 框自己也是这个坐标系：{gt[0].tolist()}")
+    print(f"  所以它们能直接算 IoU —— 如果一个是特征图坐标、一个是原图坐标，算出来毫无意义")
+    print()
+
+    # ---------- 第 1 步：每个 GT 在每层挑"中心最近"的 9 个当候选 ----------
+    gt_cx, gt_cy = (gt[0, 0] + gt[0, 2]) / 2, (gt[0, 1] + gt[0, 3]) / 2
+    cand_idx, start = [], 0
+    print("第 1 步：每层按『中心距离』挑最近的 9 个（注意：按距离，不是按 IoU）")
+    print(f"  {'层':>2}  {'stride':>6}  {'锚点边长':>8}  {'候选数':>6}  候选的 IoU 范围")
+    for level, (stride, boxes) in enumerate(zip(strides, anchors_per_level)):
+        cx = (boxes[:, 0] + boxes[:, 2]) / 2
+        cy = (boxes[:, 1] + boxes[:, 3]) / 2
+        dist = ((cx - gt_cx) ** 2 + (cy - gt_cy) ** 2).sqrt()
+        k = min(topk, boxes.size(0))
+        idx = dist.topk(k, largest=False).indices + start          # 取距离最小的
+        cand_idx.append(idx)
+        iou_lv, _ = pairwise_iou_diou(anchors[idx], gt)
+        print(f"  {level+1:>2}  {stride:>6}  {8*stride:>8}  {k:>6}  "
+              f"{iou_lv.min().item():.3f} ~ {iou_lv.max().item():.3f}")
+        start += boxes.size(0)
+
+    cand_idx = torch.cat(cand_idx)            # 5 层 × 9 = 45
+    print(f"  候选总数 = {cand_idx.numel()}  （5 层 × 9 个，这就是那个『45』）")
+    print()
+
+    # ---------- 第 2 步：算这 45 个候选的 IoU，求 μ+σ ----------
+    iou_cand, _ = pairwise_iou_diou(anchors[cand_idx], gt)
+    iou_cand = iou_cand[:, 0]
+    mu, sigma = iou_cand.mean(), iou_cand.std(unbiased=False)
+    thr = mu + sigma
+    print("第 2 步：只对这 45 个候选算阈值（不是对全图 8525 个）")
+    print(f"  45 个候选的 IoU: 均值 μ = {mu:.4f}, 标准差 σ = {sigma:.4f}")
+    print(f"  阈值 thr = μ + σ = {thr:.4f}")
+    print(f"  （对照：最好的候选 IoU = {iou_cand.max():.4f}，余量 = "
+          f"{(iou_cand.max() - thr).item():.4f}）")
+    print()
+
+    # ---------- 第 3 步：候选里 IoU ≥ thr 且中心在 GT 内 → 正样本 ----------
+    cand_boxes = anchors[cand_idx]
+    cx = (cand_boxes[:, 0] + cand_boxes[:, 2]) / 2
+    cy = (cand_boxes[:, 1] + cand_boxes[:, 3]) / 2
+    in_gt = (cx > gt[0, 0]) & (cx < gt[0, 2]) & (cy > gt[0, 1]) & (cy < gt[0, 3])
+    pos = (iou_cand >= thr) & in_gt
+    print("第 3 步：候选里同时满足『IoU ≥ thr』和『中心在 GT 内』的，才是正样本")
+    print(f"  正样本数量 = {pos.sum().item()} 个（只可能从这 45 个里出，不会更多）")
+    print(f"  它们来自第几层: ", end='')
+    layer_of = torch.cat([torch.full((min(topk, s),), i + 1) for i, s in enumerate(sizes)])
+    print(sorted(set(layer_of[pos].tolist())))
+    print()
+
+    print("三个容易记错的点：")
+    print("  ① 候选是按『中心距离』挑的，不是按 IoU 挑 —— 先把离得近的凑一桌，再看谁 IoU 高")
+    print("  ② 阈值只用这 45 个算，但 VLR 的判定要用它去筛『全图 8525 个锚点』")
+    print("     所以 VLR 能有几百个，正样本却只有几个")
+    print("  ③ 每个 GT 各算各的阈值。一张图有 3 个 GT，就有 3 个 thr，互不混合")
+    print()
+
+
 if __name__ == "__main__":
     demo1_kl()
     demo2_vlr()
     demo3_full()
+    demo4_pos_vs_vlr()
+    demo5_anchor_scale()
+    demo6_atss_threshold()
