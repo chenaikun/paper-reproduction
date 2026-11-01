@@ -198,7 +198,7 @@ def panel_d(ax):
     ax.set_ylabel('与 GT 的 IoU', fontsize=11)
     ax.set_title('D. 这 45 个候选一起算 μ+σ，得到阈值 thr', fontsize=15,
                  fontweight='bold', pad=10)
-    ax.legend(fontsize=8.5, loc='upper left', ncol=2, framealpha=0.9)
+    ax.legend(fontsize=8.5, loc='lower left', ncol=2, framealpha=0.9)
     ax.grid(axis='y', ls=':', alpha=0.5)
 
 
@@ -216,3 +216,28 @@ fig.suptitle('锚点是怎么铺的、为什么只有一个尺度能配上、45 
 out = os.path.join(OUT_DIR, 'anchor_explain.png')
 fig.savefig(out, bbox_inches='tight', facecolor='white')
 print('saved:', out)
+
+# ------------------------------------------------------------
+# 汇报用：拆成两张，投影上字更大、更好讲
+# ------------------------------------------------------------
+fig1 = plt.figure(figsize=(14, 5.6), dpi=170)
+gs1 = fig1.add_gridspec(1, 2, wspace=0.20, left=0.03, right=0.98,
+                        top=0.80, bottom=0.10)
+panel_a(fig1.add_subplot(gs1[0, 0]))
+panel_b(fig1.add_subplot(gs1[0, 1]))
+fig1.suptitle('① 坐标系与锚点：GT 和 anchor 都在「输入图」的像素坐标里',
+              fontsize=15, fontweight='bold', y=0.96)
+out1 = os.path.join(OUT_DIR, 'slide1_坐标系与锚点.png')
+fig1.savefig(out1, bbox_inches='tight', facecolor='white')
+print('saved:', out1)
+
+fig2 = plt.figure(figsize=(14, 5.4), dpi=170)
+gs2 = fig2.add_gridspec(1, 2, wspace=0.20, left=0.06, right=0.98,
+                        top=0.80, bottom=0.12)
+panel_c(fig2.add_subplot(gs2[0, 0]))
+panel_d(fig2.add_subplot(gs2[0, 1]))
+fig2.suptitle('② 尺度匹配与阈值：只有一层配得上，45 个候选一起定出 thr',
+              fontsize=15, fontweight='bold', y=0.96)
+out2 = os.path.join(OUT_DIR, 'slide2_尺度与阈值.png')
+fig2.savefig(out2, bbox_inches='tight', facecolor='white')
+print('saved:', out2)
