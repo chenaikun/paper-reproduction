@@ -1,7 +1,7 @@
 """练习3：dim 到底在切哪一维。
 
 跑法：
-    C:\\Users\\monkey\\.conda\\envs\\DL\\python.exe 2022_cvpr_ld\\练习3_看懂dim.py
+    C:\\Users\\monkey\\.conda\\envs\\DL\\python.exe 2022_cvpr_ld\\练习3_dim.py
 
 三个小实验：
     1. 二维张量里 dim=1 和 dim=0 的区别（用真实数字看）

@@ -1,49 +1,46 @@
-# LD Core Experiment
+# LD 核心机制复现实验
 
-This experiment uses the bundled official LD/MMDetection 2.10 code in
-`2022_cvpr_ld/LD`. All experiment configs inherit the official VOC/GFL/LD
-configs; training and evaluation delegate to that checkout's `tools/` entry
-points. Do not install the MMDetection 3 stack in this environment.
+本实验使用仓库内置的官方 LD / MMDetection 2.10 代码（位于 `2022_cvpr_ld/LD`）。所有实验配置都继承官方 VOC / GFL / LD 配置，训练与评估都委托给该 checkout 的 `tools/` 入口。**不要在这个环境里安装 MMDetection 3 那一套。**
 
-For a guided walkthrough, see
-[`docs/ld_core_experiment_代码导读.md`](docs/ld_core_experiment_代码导读.md)
-and
-[`docs/从零读懂_ld_core_experiment.md`](docs/从零读懂_ld_core_experiment.md).
+相关文档：
 
-## Environment
+- [`docs/zero_ld_core_experiment.md`](docs/zero_ld_core_experiment.md) —— 零基础版全流程讲解（先读这份）
+- [`docs/ld_core_experiment_code.md`](docs/ld_core_experiment_code.md) —— 逐文件代码走读 + 已知坑
+- [`docs/练习_官方LD.md`](docs/练习_官方LD.md) —— 手写练习与官方代码的逐行对照
+- [`one_epoch_mechanism_results.md`](one_epoch_mechanism_results.md) —— 本轮机制实验的原始记录
 
-The completed core-mechanism run used:
+---
 
-| Item | Recorded environment |
+## 一、环境
+
+已完成的核心机制实验所用环境：
+
+| 项 | 记录值 |
 |---|---|
-| GPU | One Tesla V100S-PCIE-32GB |
-| OS | Linux x86_64 |
+| GPU | 单张 Tesla V100S-PCIE-32GB |
+| 操作系统 | Linux x86_64 |
 | Python | 3.8.18 |
 | PyTorch | 2.0.0+cu118 |
 | torchvision | 0.15.1+cu118 |
 | CUDA / NVCC | 11.8 |
 | MMCV | `mmcv-full==1.7.2` |
-| Detector stack | Bundled LD / MMDetection 2.10.0+4287990 |
-| Training data | VOC2007 trainval + VOC2012 trainval, 16,551 images |
-| Test data | VOC2007 test, 4,952 images |
+| 检测框架 | 内置 LD / MMDetection 2.10.0+4287990 |
+| 训练数据 | VOC2007 trainval + VOC2012 trainval，16,551 张 |
+| 测试数据 | VOC2007 test，4,952 张 |
 
-The installer accepts PyTorch 2.0.x or 2.1.x with the matching torchvision
-and CUDA-specific `mmcv-full==1.7.2` wheel. The recorded run used
-PyTorch 2.0.0 and torchvision 0.15.1. Do not install MMCV 2.x or
-MMDetection 3.x.
+安装脚本接受 PyTorch 2.0.x 或 2.1.x，并据此选择对应 torchvision 与 CUDA 版本的 `mmcv-full==1.7.2` 预编译 wheel。本次记录使用的是 PyTorch 2.0.0 + torchvision 0.15.1。**不要安装 MMCV 2.x 或 MMDetection 3.x。**
 
-The recorded cloud paths were:
+本次记录的云端路径：
 
 ```text
-Data:  /cloud/cloud-ssd1/ld-data/VOCdevkit
-Runs:  /cloud/cloud-ssd1/ld-runs
-Logs:  /cloud/cloud-ssd1/ld-runs/logs
+数据：  /cloud/cloud-ssd1/ld-data/VOCdevkit
+产物：  /cloud/cloud-ssd1/ld-runs
+日志：  /cloud/cloud-ssd1/ld-runs/logs
 ```
 
-The one-epoch mechanism run is summarized in
-[`one_epoch_mechanism_results.md`](one_epoch_mechanism_results.md).
+一轮机制实验的汇总见 [`one_epoch_mechanism_results.md`](one_epoch_mechanism_results.md)。
 
-From the repository root, after choosing a CUDA-enabled PyTorch image:
+在仓库根目录，准备好带 CUDA 的 PyTorch 镜像后：
 
 ```bash
 git submodule update --init --recursive
@@ -51,88 +48,68 @@ python -c "import torch; print(torch.__version__, torch.version.cuda)"
 python 2022_cvpr_ld/ld_core_experiment/scripts/install_environment.py
 ```
 
-The installer:
+安装脚本做的事情：
 
-1. Applies `patches/ld-mmcv-1.7.2.patch` to the bundled LD source, idempotently.
-   This patch is tracked **in the parent repository** so a fresh cloud clone
-   gets the same fixes, without needing to push commits to the official LD repo.
-2. Pins NumPy, YAPF (MMCV's `verify=True` formatting API), OpenCV and COCO
-   dependencies; replaces the abandoned `mmpycocotools` dependency/check with
-   maintained `pycocotools`; keeps the original LD loss/model implementations.
-3. Removes conflicting MMCV distributions, then requires a matching binary
-   `mmcv-full` wheel from the PyTorch/CUDA-specific OpenMMLab index. It does
-   **not** silently start compiling when no wheel exists.
-4. Installs the patched local LD checkout in editable mode and executes CPU
-   and CUDA NMS plus ROIAlign forward/backward, model registration and config
-   formatting checks.
+1. 幂等地把 `patches/ld-mmcv-1.7.2.patch` 打进内置的 LD 源码。该补丁由**父仓库**跟踪，因此云端全新 clone 也能得到相同的修复，无需往官方 LD 仓库推 commit。
+2. 固定 NumPy、YAPF（MMCV 的 `verify=True` 格式化接口依赖它）、OpenCV 和 COCO 相关依赖；把已废弃的 `mmpycocotools` 依赖与版本检查替换为维护中的 `pycocotools`；保留官方 LD 的 loss 与模型实现。
+3. 卸载冲突的 MMCV 发行版，然后从 OpenMMLab 按 PyTorch/CUDA 区分的索引安装匹配的 `mmcv-full` **二进制 wheel**。**找不到 wheel 时不会悄悄开始编译。**
+4. 以 editable 模式安装打好补丁的本地 LD，并执行 CPU / CUDA 的 NMS 与 ROIAlign 前反向、模型注册和配置格式化检查。
 
-A compiler or wheel-index/network failure is an installation failure, not a
-successful environment check. If a matching wheel is unavailable, use a CUDA
-**development** image (not runtime-only), check that `nvcc --version` matches
-`torch.version.cuda`, then explicitly opt into compilation:
+编译失败或 wheel 索引/网络失败，都算安装失败，不算环境检查通过。如果确实没有匹配的 wheel：换用 CUDA **开发版**镜像（不要用 runtime-only），确认 `nvcc --version` 与 `torch.version.cuda` 一致，然后显式开启编译：
 
 ```bash
 python 2022_cvpr_ld/ld_core_experiment/scripts/install_environment.py --build-mmcv
 ```
 
-To reapply/check only the source patch (no Python dependencies required):
+只想重新打补丁或检查补丁状态（不需要任何 Python 依赖）：
 
 ```bash
 python 2022_cvpr_ld/ld_core_experiment/scripts/apply_ld_compat.py
 python 2022_cvpr_ld/ld_core_experiment/scripts/apply_ld_compat.py --check
 ```
 
-Patch conflicts stop without changing source files; do not discard your own
-LD edits to force installation. A modified/dirty LD submodule after patching
-is expected. Commit the parent experiment's patch/script files, **not** a new
-LD gitlink pointing to an unpublished local commit.
+补丁冲突时会直接停止且不改动任何源文件；不要为了让安装通过而丢弃自己对 LD 的修改。打完补丁后 LD 子模块处于"已修改"状态是**预期行为**。需要提交的是父仓库里的补丁和脚本文件，**不要**提交一个指向本地未发布 commit 的 LD gitlink。
 
-Run environment checks again before training:
+训练前再跑一次环境检查：
 
 ```bash
 python 2022_cvpr_ld/ld_core_experiment/scripts/check_environment.py --require-cuda
 ```
 
-Operator checks do not replace a real teacher/student training step. The
-single-step VOC checks below still require a GPU, data, and (for LD) a trained
-teacher checkpoint. The `requirements-legacy.txt` file records the old MMCV
-reference only; the installer/checker above target the modern stack.
+算子检查不能替代真正的教师/学生训练一步。下面的 VOC 单步检查仍然需要 GPU、数据，LD 那一步还需要训练好的教师权重。`requirements-legacy.txt` 只用于记录旧的 MMCV 版本参考；上面的安装与检查脚本都面向新栈。
 
-Dependency-free patch regression tests can run on a development laptop:
+不依赖第三方库的补丁回归测试可以在开发机上直接跑：
 
 ```bash
 python -m unittest discover -s 2022_cvpr_ld/ld_core_experiment/tests -v
 ```
 
-## Hardware Profiles
+---
 
-The experiment uses the `auto` profile by default and selects a conservative
-resize from the visible GPU memory. The recorded V100S run used `tiny`
-(`640x384`), batch size 4, two data-loader workers, dynamic-loss-scale FP16,
-and one GPU. Its student runs remained well below the 32 GB device limit:
+## 二、硬件档位
+
+实验默认使用 `auto` 档位，根据可见显存自动选择保守的输入尺寸。本次 V100S 记录使用的是 `tiny`（`640x384`）、batch size 4、2 个 dataloader worker、动态 loss-scale FP16、单卡。各学生变体的显存占用都远低于 32 GB：
 
 ```text
-Baseline training: approximately 812 MiB
-KD-only training:  approximately 1,189 MiB
-Full LD smoke test: approximately 506 MiB at batch size 1
+Baseline 训练：约 812 MiB
+KD-only 训练：约 1,189 MiB
+Full LD 冒烟（batch size 1）：约 506 MiB
 ```
 
-The available profiles can be selected as follows:
+可选档位如下：
 
 ```bash
-# 640x384, one sample, no data-loader workers
+# 640x384，单样本，无 dataloader worker
 LD_PROFILE=tiny python scripts/train_baseline.py --data-root /path/to/VOCdevkit
 
-# 1000x600, one sample, two workers
+# 1000x600，单样本，2 个 worker
 LD_PROFILE=default python scripts/train_baseline.py --data-root /path/to/VOCdevkit
 
-# 1333x800, one sample, four workers
+# 1333x800，单样本，4 个 worker
 LD_PROFILE=high python scripts/train_baseline.py --data-root /path/to/VOCdevkit
 ```
 
-The available profiles are `tiny`, `low`, `default`, and `high`. Individual
-settings can also be overridden with `LD_IMAGE_WIDTH`, `LD_IMAGE_HEIGHT`,
-`SAMPLES_PER_GPU`, and `WORKERS_PER_GPU`. Dynamic-loss-scale FP16 is optional:
+可用档位为 `tiny`、`low`、`default`、`high`。单项设置也可以用 `LD_IMAGE_WIDTH`、`LD_IMAGE_HEIGHT`、`SAMPLES_PER_GPU`、`WORKERS_PER_GPU` 覆盖。动态 loss-scale 的 FP16 是可选项：
 
 ```bash
 LD_PROFILE=low WORKERS_PER_GPU=0 \
@@ -140,19 +117,19 @@ LD_PROFILE=low WORKERS_PER_GPU=0 \
   --teacher-checkpoint runs/teacher_r101/epoch_16.pth
 ```
 
-All wrappers expose `--gpu-id` because this non-distributed MMCV runner
-supports exactly one GPU:
+所有封装脚本都提供 `--gpu-id`，因为这套非分布式的 MMCV runner **只支持单卡**：
 
 ```bash
 python scripts/train_baseline.py --gpu-id 0 --profile default
 ```
 
-Distributed multi-GPU launching is not implemented by these wrappers.
+这些封装脚本没有实现分布式多卡启动。
 
-## Dataset
+---
 
-Set `VOC_DATA_ROOT` to the `VOCdevkit` directory. The configs support both
-separate-year data and the merged OpenI `VOC07_12` dataset.
+## 三、数据集
+
+把 `VOC_DATA_ROOT` 指向 `VOCdevkit` 目录。配置同时支持按年份分开的布局和 OpenI 合并版 `VOC07_12`。
 
 ```text
 VOCdevkit/
@@ -167,37 +144,29 @@ VOCdevkit/
     └── JPEGImages/
 ```
 
-The OpenI merged dataset may instead place the combined 2007+2012 training
-split and VOC2007 test split under `VOCdevkit/VOC2007/`, with no separate
-`VOC2012/` directory. The config detects the merged layout when the VOC2012
-trainval split file is absent. Its merged `VOC2007/ImageSets/Main/trainval.txt`
-should contain about 16,551 training images, as stated in that dataset's
-description.
+OpenI 的合并版可能把 2007+2012 的合并训练划分与 VOC2007 test 划分都放在 `VOCdevkit/VOC2007/` 下，没有单独的 `VOC2012/` 目录。配置在 **VOC2012 的 trainval 划分文件不存在**时判定为合并版。合并版的 `VOC2007/ImageSets/Main/trainval.txt` 应包含约 16,551 张训练图，与该数据集的说明一致。
 
-The default is detected from either `2022_cvpr_ld/data/VOCdevkit` or
-`2022_cvpr_ld/data`, whichever contains `VOC2007/`. Validate it with:
+默认路径会从 `2022_cvpr_ld/data/VOCdevkit` 或 `2022_cvpr_ld/data` 中自动探测（取包含 `VOC2007/` 的那个）。校验命令：
 
 ```bash
 python 2022_cvpr_ld/ld_core_experiment/scripts/check_dataset.py \
   --data-root /path/to/VOCdevkit --full
 ```
 
-The low-resource configs use VOC2007+VOC2012 trainval and VOC2007 test, one
-sample per GPU by default, and an automatic resize profile. These are
-low-resource settings, not the paper's full COCO setup.
+低资源配置使用 VOC2007+VOC2012 trainval 训练、VOC2007 test 测试，默认每卡 1 个样本，输入尺寸自动选择。**这些是低资源设置，不是论文的完整 COCO 协议。**
 
-## Smoke Test
+---
 
-This performs a real forward/backward/optimizer step using the official
-MMDetection 2 data/model APIs. It does not start a full epoch:
+## 四、冒烟测试
+
+它会用官方 MMDetection 2 的数据与模型 API 真跑一次 forward / backward / optimizer step，不启动完整 epoch：
 
 ```bash
 cd 2022_cvpr_ld/ld_core_experiment
 VOC_DATA_ROOT=/path/to/VOCdevkit ./run_smoke.sh
 ```
 
-After training the teacher, include its checkpoint to also smoke-test the LD
-student and frozen-teacher forward:
+训练完教师后，可以带上教师权重，一并冒烟测试 LD 学生与冻结教师的前向：
 
 ```bash
 VOC_DATA_ROOT=/path/to/VOCdevkit \
@@ -205,13 +174,11 @@ TEACHER_CHECKPOINT=/path/to/teacher/epoch_16.pth \
 ./run_smoke.sh
 ```
 
-## Completed One-Epoch Mechanism Check
+---
 
-The recorded mechanism check used one full pass over the combined VOC07+12
-training set, `640x384`, batch size 4 on one V100S, FP16, and offline
-evaluation. All student variants shared these settings so that the comparison
-isolates their distillation losses. `LD_REPEAT_TIMES=1` changes an epoch from
-the official three repeated passes to one pass over all 16,551 images.
+## 五、已完成的一轮机制实验
+
+本次记录的机制实验：在合并后的 VOC07+12 训练集上完整过一遍，`640x384`，单卡 V100S 上 batch size 4，FP16，离线评估。所有学生变体共用这套设置，从而让比较只反映蒸馏 loss 的差异。`LD_REPEAT_TIMES=1` 把"一个 epoch"从官方的三次重复遍历改为完整遍历 16,551 张一次。
 
 ```bash
 export VOC_DATA_ROOT=/path/to/VOCdevkit
@@ -242,17 +209,15 @@ python scripts/train_ld.py --variant main-ld-only \
   --seed 0 --deterministic
 ```
 
-This validates the distillation pipeline and directional trends. It is not a
-reproduction of the paper's COCO AP or its 12/16-epoch training schedules.
-The full protocol and measured VOC results are recorded in
-[`one_epoch_mechanism_results.md`](one_epoch_mechanism_results.md).
-Those recorded runs predate the seed and repeat-time CLI options; future runs
-use the explicit seed 0 shown above.
+这验证的是蒸馏链路与方向性趋势，**不是**复现论文的 COCO AP 或 12/16 epoch 训练计划。完整协议与实测 VOC 结果记录在 [`one_epoch_mechanism_results.md`](one_epoch_mechanism_results.md)。
 
-## Training Order
+> 注：那些已记录的运行早于 `--seed` 与 `--repeat-times` 命令行选项的加入；后续运行请使用上面显式的 seed 0。
 
-Train the R101 teacher first. The config uses ImageNet initialization and the
-official 16-epoch VOC schedule by default:
+---
+
+## 六、训练顺序
+
+**第一步：训练 R101 教师。** 配置默认使用 ImageNet 初始化与官方 16 epoch VOC 计划：
 
 ```bash
 python scripts/train_teacher.py \
@@ -262,12 +227,9 @@ python scripts/train_teacher.py \
   --samples-per-gpu 1
 ```
 
-To initialize from a GFL COCO detector checkpoint before VOC fine-tuning,
-pass `--load-from /path/to/gfl_r101_coco.pth`. The 80-class classification
-head will not match the 20-class VOC head, but the backbone, neck, and matching
-head weights can still initialize the teacher.
+如果希望先用 GFL COCO 检测器权重初始化、再做 VOC 微调，可以传 `--load-from /path/to/gfl_r101_coco.pth`。80 类的分类头与 20 类的 VOC 头对不上，但骨干、neck 和能对上的 head 权重仍然可以用来初始化教师。
 
-Then train the GFL-R18 student baseline:
+**第二步：训练 GFL-R18 学生基线。**
 
 ```bash
 python scripts/train_baseline.py \
@@ -277,8 +239,7 @@ python scripts/train_baseline.py \
   --samples-per-gpu 1
 ```
 
-Run the three teacher-student ablations. The default teacher checkpoint is
-`runs/teacher_r101/epoch_16.pth`:
+**第三步：跑教师-学生的各组消融。** 教师权重的默认路径是 `runs/teacher_r101/epoch_16.pth`：
 
 ```bash
 python scripts/train_ld.py --variant kd-only \
@@ -289,12 +250,18 @@ python scripts/train_ld.py --variant full \
   --teacher-checkpoint runs/teacher_r101/epoch_16.pth
 ```
 
-The LD head uses the official `loss_kd`, `loss_ld`, and `loss_ld_vlr`
-implementations. `kd-only` disables both localization losses; `main-ld-only`
-uses Main LD without VLR; `loc-only` uses Main LD plus VLR LD; `full` retains
-all three. All variants retain the student's GT detection losses.
+LD head 使用官方的 `loss_kd`、`loss_ld`、`loss_ld_vlr` 实现：
 
-Evaluate a checkpoint with the same config used for that run:
+| 变体 | `loss_kd` | `loss_ld` | `loss_ld_vlr` |
+|---|---:|---:|---:|
+| `kd-only` | 10 | 0 | 0 |
+| `main-ld-only` | 0 | 0.25 | 0 |
+| `loc-only` | 0 | 0.25 | 0.25 |
+| `full` | 10 | 0.25 | 0.25 |
+
+所有变体都保留学生自己的 GT 检测损失。
+
+**评估**：用与该次训练相同的 config 评估 checkpoint：
 
 ```bash
 python scripts/evaluate_baseline.py \
@@ -304,14 +271,11 @@ python scripts/evaluate_baseline.py \
   --profile tiny
 ```
 
-For an LD checkpoint, pass its matching `configs/ld_r18_voc_*.py` config and
-`--teacher-checkpoint` as well. The wrapper default remains batch size 1 for
-portability; the V100S mechanism run used batch size 4 at `640x384`.
-Evaluation stdout is saved automatically beside the checkpoint as
-`<config>_eval.log`; use `--log-file` to choose another path.
+如果是 LD 的 checkpoint，除了对应的 `configs/ld_r18_voc_*.py`，还要同时传 `--teacher-checkpoint`。封装脚本默认仍是 batch size 1 以便移植；V100S 上的机制实验用的是 `640x384`、batch size 4。
 
-For a direct student-teacher output comparison, run the deterministic
-distribution diagnostic:
+评估的 stdout 会自动保存到 checkpoint 同目录下的 `<config>_eval.log`，也可以用 `--log-file` 指定其它路径。
+
+**想做学生与教师输出的直接对比**，可以跑确定性的分布诊断脚本：
 
 ```bash
 python analysis/analyze_output_distances.py \
@@ -321,6 +285,4 @@ python analysis/analyze_output_distances.py \
   --profile tiny
 ```
 
-The script writes `output_distances.json` beside the student checkpoint and
-reports classification soft-label L1 plus four-edge localization
-distribution L1 at every FPN level.
+该脚本会在学生 checkpoint 旁边写出 `output_distances.json`，并在每个 FPN 层上报告"分类软标签 L1 误差"以及"四条边定位分布 L1 误差"。

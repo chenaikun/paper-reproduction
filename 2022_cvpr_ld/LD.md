@@ -296,7 +296,7 @@ VLR 段  ：loss_ld_vlr（教师分布，权重=与 GT 的 IoU，avg_factor=16�
 |---|---|---|---|
 | `练习1_最小定位蒸馏.py` | `kd_loss.py:32` | **KL 的方向对了**（第一个参数 log 概率、第二个概率，很多人会写反）；mask 思路就是 `weighted_loss` 的雏形；用最大绝对误差 `max(S_p − T_p)` 自检收敛 | ① 格子维**求和** vs 官方**求平均**（实测 KL 0.4512 vs 0.0902，**正好差 5 倍 = 格子数**）② 没有 `/T` 和 `×T²` ③ 没有 `detach()` 与 `assert` |
 | `算法1_Valuable_Localization_Region.py` | `atss_assigner.py:183` | DIoU 公式 `IoU − ρ²/c²` 对；"选一段区间"的思想对；输出 `(anchor, GT)` 布尔矩阵对 | 阈值是写死的，官方是每个 GT 自适应 `μ+σ`；双重 for 循环要向量化；判据 DIoU 但**权重用 IoU** |
-| `练习3_看懂dim.py` | `loss_single` 的 `reshape(-1, 17)` | 讲清 `(N, 68)` → `(N×4, 17)` 之后 `dim=1` 正好是 17 个 bin | —— |
+| `练习3_dim.py` | `loss_single` 的 `reshape(-1, 17)` | 讲清 `(N, 68)` → `(N×4, 17)` 之后 `dim=1` 正好是 17 个 bin | —— |
 | `练习2_把两个练习拼成loss_ld.py` | `loss_single` 全流程 | 用 80 个锚点拼出迷你 `loss_ld` + `loss_ld_vlr`，跑通"45 候选 → μ+σ 阈值 → 正样本 / VLR" | 规模从 80 个锚点扩到真实输入（640×384 共 5,115 个锚点），还要加质量分权重和 `avg_factor` |
 | `画图_锚点与45候选.py` | 汇报用示意图 | 三个坐标系（原图/输入图/特征图）、45 个候选怎么定阈值 | 需要 matplotlib + 中文字体 |
 
@@ -648,14 +648,16 @@ AP50 只要求 IoU > 0.5，框"大概套住"就给分，对边界不敏感；AP7
 | [ld_core_experiment/README.md](ld_core_experiment/README.md) | 环境、配置档位、命令全在这里 | 备查 |
 | [ld_core_experiment/one_epoch_mechanism_results.md](ld_core_experiment/one_epoch_mechanism_results.md) | **结果原始记录**（本文第 3 章的数据来源） | 被追问时打开 |
 | [ld_core_experiment/configs/](ld_core_experiment/configs/) | 5 个变体配置 | 讲"只改三个数字" |
-| [ld_core_experiment/docs/从零读懂_ld_core_experiment.md](ld_core_experiment/docs/从零读懂_ld_core_experiment.md) | 零基础版全流程讲解 | 不主动提 |
-| [ld_core_experiment/docs/ld_core_experiment_代码导读.md](ld_core_experiment/docs/ld_core_experiment_代码导读.md) | 逐文件代码走读 + 已知坑 | 不主动提 |
-| [ld_core_experiment/docs/从你的两个练习到官方LD_逐行对照.md](ld_core_experiment/docs/从你的两个练习到官方LD_逐行对照.md) | 练习 → 官方代码的逐行差异 | **讲"我真的懂了"时用** |
+| [ld_core_experiment/docs/zero_ld_core_experiment.md](ld_core_experiment/docs/zero_ld_core_experiment.md) | 零基础版全流程讲解 | 不主动提 |
+| [ld_core_experiment/docs/ld_core_experiment_code.md](ld_core_experiment/docs/ld_core_experiment_code.md) | 逐文件代码走读 + 已知坑 | 不主动提 |
+| [ld_core_experiment/docs/练习_官方LD.md](ld_core_experiment/docs/练习_官方LD.md) | 练习 → 官方代码的逐行差异 | **讲"我真的懂了"时用** |
 | [练习1_最小定位蒸馏.py](练习1_最小定位蒸馏.py) | 手写 KL 蒸馏 | 现场可跑（纯 torch） |
 | [算法1_Valuable_Localization_Region.py](算法1_Valuable_Localization_Region.py) | 手写 DIoU + VLR 区间 | 现场可跑 |
 | [练习2_把两个练习拼成loss_ld.py](练习2_把两个练习拼成loss_ld.py) | 80 锚点的迷你 loss_ld | 现场可跑，输出有讲解 |
-| [练习3_看懂dim.py](练习3_看懂dim.py) | 解释 `(N*4, 17)` 与 `dim=1` | 被问张量形状时用 |
-| [画图_锚点与45候选.py](画图_锚点与45候选.py) | 锚点/坐标系/45 候选示意图 | 需 matplotlib + 中文字体；`OUT_DIR` 现在取了两层 `dirname`，会写到上级目录，跑前先改 |
+| [练习3_dim.py](练习3_dim.py) | 解释 `(N*4, 17)` 与 `dim=1` | 被问张量形状时用 |
+| [画图_锚点与45候选.py](画图_锚点与45候选.py) | 锚点/坐标系/45 候选示意图 | 需 matplotlib + 中文字体；输出到仓库根的 `figures/anchor_explain.png` |
+| [LD_简.md](LD_简.md) | 上台汇报用的精简版 | **汇报前照着过一遍** |
+| [LD论文.md](LD论文.md) | 按论文原章节的分章导读（含公式与算法） | 被问论文细节时用 |
 | [最小核心复现.md](最小核心复现.md) | 早期选题规划（已归档） | 讲"计划怎么收敛"时用 |
 
 ### B. 命令清单
