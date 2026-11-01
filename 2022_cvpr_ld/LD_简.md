@@ -124,7 +124,7 @@ kd_loss = F.kl_div(F.log_softmax(pred / T, dim=1), target,
 
 所有变体都保留学生自己的 GT 监督（`loss_cls / loss_bbox / loss_dfl`）——这是"只差蒸馏 loss"的准确含义。
 
-### 3.2 约束：未改官方代码
+### 3.2 未改官方代码
 
 官方仓库是 submodule，改了别人就复现不了。所以：
 
@@ -134,7 +134,7 @@ kd_loss = F.kl_div(F.log_softmax(pred / T, dim=1), target,
 
 真正的 loss 在一处：`LDHead.loss_single()`（`ld_head.py:116-282`）。
 
-### 3.3 为了去理解论文，手写了两个脚本
+### 3.3 理解论文，脚本
 
 | 我写的 | 对应的官方代码 | 差在哪 |
 |---|---|---|
