@@ -1,0 +1,932 @@
+
+===== PAGE 1 =====
+Incremental Object Detection via Future-Aware Decoupled Cross-Head
+Distillation
+Chenfeng Yin1, De Cheng1*, Wenlong Luo2, Mingyue Zeng1, Shizhou Zhang2, Nannan Wang1, Xinbo Gao1
+1Xidian University, 2Northwestern Polytechnical University
+{yinchenfeng,zengmingyue}@stu.xidian.edu.cn{dcheng,nnwang,}@xidian.edu.cn
+luowenlong@mail.nwpu.edu.cn,szzhang@nwpu.edu.cn,xbgao@mail.xidian.edu.cn
+Abstract
+Incremental Object Detection (IOD) enables AI systems to
+continuously acquire new object classes while preserving
+knowledge of previously learned ones, an ability essential
+for deployment in dynamic, real-world environments. Ex-
+isting IOD methods typically rely on knowledge distilla-
+tion to mitigate catastrophic forgetting. However, the tight
+coupling between the student model’s detection head and
+backbone causes distillation gradients to conflict with new-
+class supervision at the head, injecting head-specific bias
+into the backbone and ultimately weakening distillation ef-
+fectiveness. To address this issue, we propose a decoupled
+training mechanism for the model’s backbone and classi-
+fication head. Specifically, we introduce the Future-aware
+Cross-head decoupled Distillation (FaCHD) method, which
+utilizes two frozen complementary teachers (historical and
+intermediate teachers) to decode the student’s ROI features
+for cross-head distillation. This strategy implicitly allevi-
+ates prediction conflicts caused by detection-head bias and
+provides richer task-relevant guidance, thereby improving
+distillation efficiency. To further address the detection head
+bias and model recency problem, we propose a Prototype
+Semantic Drift Compensation module, which recalibrates
+multi-granularity prototypes of old classes, effectively cor-
+recting semantic drift and enhancing the stability of the de-
+tection head. Extensive experiments on two standard IOD
+benchmarks demonstrate the effectiveness and superiority
+of the proposed method.
+1. Introduction
+Object detection is a fundamental task in computer vision
+with critical applications in autonomous driving, robotics,
+and video understanding [9, 10, 35]. Conventional object
+detectors assume access to all categories and exhaustively
+annotated data at once, enabling static joint training. How-
+*Corresponding author: De Cheng (dcheng@xidian.edu.cn).
+ever, real-world deployment often involves dynamic envi-
+ronments where new object classes continually emerge, and
+storing historical data is impractical or restricted due to
+memory constraints and privacy concerns. These challenges
+have motivated the study of Incremental Object Detection
+(IOD) [31], which aims to continuously learn new classes
+while retaining previously acquired knowledge, effectively
+mitigating catastrophic forgetting in evolving, real-world
+scenarios.
+Following the traditional Class Incremental Learn-
+ing (CIL) paradigm, existing Incremental Object De-
+tection (IOD) methods can be roughly categorized
+into regularization-based and replay-based approaches.
+Among regularization-based methods, Knowledge Distilla-
+tion (KD) [5, 8, 11, 13, 23, 29, 31, 46] plays a vital role
+in mitigating catastrophic forgetting for IOD. Compared
+with CIL, IOD faces unique challenges arising from the co-
+occurrence of multiple task classes within the current train-
+ing data: (1) foreground objects from previous tasks may
+remain unlabeled in the current stage, making them prone to
+misclassification as background; (2) the current-stage back-
+ground may contain objects from future tasks, which may
+inadvertently be treated as foreground. These factors induce
+inter-class overlap and foreground-background confusion,
+further exacerbating cross-task interference during knowl-
+edge distillation. Although existing KD-based IOD meth-
+ods impose strong regularization to prevent forgetting, they
+often overlook prediction conflicts arising from distillation
+in object detection models. Specifically, when distillation
+is applied directly to output logits, conflicts arise between
+the student model’s assigner-based ground-truth targets and
+the teacher model’s predictions. Moreover, many methods
+tightly couple the detection head and backbone, causing
+head-specific bias (typically biased toward new classes) to
+be imprinted into the backbone features, which further ag-
+gravates catastrophic forgetting.
+To address these challenges, we propose Future-aware
+Decoupled Cross-Head Distillation (FaCHD), a novel
+framework for IOD that performs feature distillation
+This CVPR paper is the Open Access version, provided by the Computer Vision Foundation.
+ Except for this watermark, it is identical to the accepted version;
+the final published version of the proceedings is available on IEEE Xplore.
+39935
+
+===== PAGE 2 =====
+through decoupled cross-head knowledge transfer from
+both past and future detection models. Unlike conven-
+tional approaches that directly enforce consistency between
+intermediate feature maps or teacher-student predictions,
+FaCHD explicitly conducts feature distillation under the
+regularization of past and future detection heads, thereby
+implicitly mitigating prediction conflicts arisen by the
+detection-head bias and improving distillation efficiency.
+Specifically, the intermediate features from the student’s
+backbone are fed to both the past and future detection head
+to produce cross-head predictions [36]. Then, prediction
+concatenation and Knowledge distillation are applied be-
+tween these cross-head predictions and the teachers’ out-
+puts. The key innovation of FaCHD lies in its cross-head
+decoding strategy: the student’s Region of Interest (ROI)
+features are decoded by two teachers, each specialized in
+their respective knowledge domains,i.e.,previous and cur-
+rent category spaces. By decoupling the student’s detection
+head from the backbone, gradients are constrained to flow
+exclusively through the backbone and ROI, ensuring sta-
+ble, head-independent geometric representations, so as to
+address the detection haed bias and model recency prob-
+lem. This strategy not only enhances training stability for
+prediction mimicking, but also provides more task-oriented
+information than conventional feature imitation.
+To further address the detection head bias and model re-
+cency problem, existing class incremental learning method
+usually store prototypes/statistics for old categories, facil-
+iating the joint learning with current class features. How-
+ever, features of previously learned classes may become
+misaligned due to semantic drift, which can reduce the ef-
+ficiency of detection head learning. To this end, we pro-
+pose a semantic drift compensation mechanism over multi-
+granularity ROI prototypes. Specifically, we maintain a
+bank of ROI prototypes at multiple granularities and esti-
+mate class-specific semantic offsets by comparing feature
+maps from the current (student) and historical models. Re-
+calibrating these prototypes allows the model to automat-
+ically correct drift without requiring annotations for old
+classes. This mechanism operates primarily on the student’s
+detection head, resetting task-specific decision boundaries
+while preserving the underlying geometric consistency of
+features. By separately addressing the tasks of backbone
+geometric consistency shaping through FaCHD and head
+decision boundary resetting through prototype compensa-
+tion, our framework systematically and modularly mitigates
+catastrophic forgetting, enhancing both stability and adapt-
+ability in incremental object detection.
+To summarize, our contributions are as follows:
+• We propose a future-aware decoupled cross-Head distil-
+lation mechanism for IOD, which performs feature dis-
+tillation through decoupled cross-head knowledge trans-
+fer from both past and current detection models. This
+strategy not only enhances training stability for prediction
+mimicking, but also provides more task-oriented informa-
+tion than conventional feature imitation.
+• We propose Prototype Semantic Drift Compensation
+mechanism, which recalibrates multi-granularity proto-
+types for old classes, solving the problem of semantic
+drift and resetting task-specific decision boundary of the
+detection head.
+• Through extensive experiments, we validate the effective-
+ness of our approach in reducing catastrophic forgetting
+across two benchmark IOD datasets, achieving superior
+performance compared to state-of-the-art methods.
+2. Related Work
+Class Incremental Learning.Existing class-incremental
+learning methods can be broadly grouped into three cat-
+egories: (1) regularization- and distillation-based ap-
+proaches, (2) replay- and prototype-based methods, and
+(3) parameter-isolation or dynamic-architecture strategies.
+Our work is most closely related to the knowledge distilla-
+tion–based line, which remains the dominant paradigm in
+this field. LwF [19] preserves prior knowledge by align-
+ing the student’s predictions with a frozen teacher, while
+EWC [17] restricts updates to parameters identified as im-
+portant through Fisher information. Subsequent studies fur-
+ther refine distillation using adaptive regularization, and
+task-aware feature or logit alignment [1, 2, 6, 18, 21, 26,
+27, 44]. Despite these advances, distillation remains highly
+sensitive to conflicts between old and new tasks, a challenge
+our method aims to address.
+Incremental Object Detection.Compared with class-
+incremental learning, incremental object detection (IOD)
+is more challenging because the model must preserve spa-
+tial localization while coping with missing annotations and
+background conflicts,i.e., unlabeled old or future objects
+are often treated as background, causing severe supervision
+bias. Within two-stage detectors such as Faster R-CNN also
+used in our work, ILOD [34] first introduced knowledge
+distillation into IOD. Follow-up methods further explored
+where and how to distill within the detection pipeline.
+Faster ILOD [32], AFD [22], and ERD [11] strengthen
+the preservation of old knowledge across the RPN, ROI
+features, and the classification and regression heads. To
+mitigate non-co-occurrence between old and new classes,
+dual-teacher frameworks exploit unlabeled in-the-wild data
+and fused teacher probabilities to reduce information asym-
+metry [8, 30, 45]. Rehearsal-based methods have also
+evolved: Augmented Box Replay (ABR) [25] replays only
+foreground boxes using mixup or mosaic augmentation,
+avoiding the foreground/background shift caused by full-
+image replay. More recently, prototype- and distribution-
+alignment techniques have been explored. For example,
+Gaussian-mixture modeling of high-dimensional prototypes
+39936
+
+===== PAGE 3 =====
+captures both intra- and inter-class variability across stages,
+helping alleviate semantic drift in the detector head [38].
+3. Methodology
+3.1. Preliminaries
+Problem Formulation.Incremental object detection trains
+a detector overNsuccessive stages, each introducing a
+fresh subset of categories. Let the full category space be
+C={C 1, . . . ,Ct, . . . ,CN }, where each subsetC t repre-
+sents a disjoint set of categories introduced at staget, with
+the label space progressively growing as new categories are
+added at each stage. At staget, the dataD t ={X t,Y t}in-
+clude images and annotations. An imagex i ∈ Xt may con-
+tain objects from multiple classes inC, but only instances
+belonging toC t are annotated. The goal is to update the de-
+tector fromM t−1 toM t using onlyD t, without access to
+prior datasetsD 1:t−1, while maintaining or improving per-
+formance on previously learned classes.
+General Object Detector.Following prior work [4,
+24, 29, 42], we adopt Faster R-CNN as the base detec-
+tion framework, which is trained end-to-end and consists
+of three modules: a backbone feature extractorM f , a Re-
+gion Proposal Network (RPN)Mrpn, and a region-wise pre-
+diction head (ROI head)M roi, with the classification head
+denoted byH. Given an input image,M f produces a
+dense feature map. On top of these features,Mrpn evaluates
+predefined anchors at each spatial location and regresses
+bounding-box offsetsl∈R 1×4 to form proposals. The
+headM roi then takes both positive and negative proposals
+as input and yields final category probabilitiesp∈R |C|+1
+(covering|C|foreground classes plus a background class)
+with the corresponding bounding box regressionsb.
+3.2. Overall Framework
+The overall framework of our method is illustrated in Fig. 1,
+featuring a two-stage training paradigm that jointly regular-
+izes feature learning through cross-head knowledge trans-
+fer and preserves classifier-level knowledge via prototype-
+based correction.
+Specifically, Future-Aware Decoupled Cross-Head Dis-
+tillation (FaCHD) decouples the classification head from the
+backbone and conducts bidirectional cross-head distillation.
+The ROI features from the incrementally trained student
+model are decoded by the classification heads of two frozen
+teacher models, producing complementary cross-head tar-
+gets. The student’s cross-predicted labels are then aligned
+with the teachers’ outputs via a distillation loss, effectively
+mitigating the conflict between new-class supervision and
+old-class distillation. Building upon this decoupled head
+design, Region Prototype Semantic Correction (RPSC) fur-
+ther compensates for the semantic drift of multi-granularity
+region prototypes associated with old classes. By estimat-
+ing feature-space misalignment between the old and new
+detectors, RPSC recalibrates old-class prototypes and inte-
+grates them with current prototypes to retrain the classifi-
+cation head, thereby reinforcing knowledge retention at the
+classification head level.
+3.3. Future-Aware Decoupled Cross-Head Distilla-
+tion
+IOD requires the model to adapt to newly introduced
+categories while preserving discrimination of previously
+learned ones. However, the mismatch between new-class
+supervision and old-class distillation produces competing
+gradients on the shared classifier, leading to biased opti-
+mization and accelerated forgetting. To address this issue,
+FaCHD decouples the classification head from the back-
+bone and introduces a dual-teacher cross-head distillation
+scheme that provides stable and consistent guidance across
+incremental tasks.
+Specifically, the dual-teacher framework is composed of
+an old-class expert teacherM t−1 and a new-class interme-
+diate teacherM imt .M t−1 provides reliable guidance for
+preserving historical knowledge, whileM imt is optimized
+only byD t, offering adaptive supervision aligned with new-
+class learning. The proposed regions fromM t−1 serve
+as the distillation regionsR, ensuring that the knowledge
+transfer is concentrated on reliable old-class areas. Follow-
+ing the region partitioning and background label reconstruc-
+tion strategy proposed in [29], we divide the distillation
+regionsRaccording to their Intersection-over-Union (IoU)
+with the bounding boxesY t of new-class objects:
+R1 ={d j ∈ R | ∀yi ∈ Yt,IoU(d j,y i)≤λ 2 },
+R2 ={d j ∈ R | ∀yi ∈ Yt,IoU(d j,y i)> λ2 }, (1)
+whereR 1 represents regions that are more likely to belong
+to old classes, whileR 2 corresponds to regions that are
+more likely to contain new classes.
+Then, FaCHD includes a background probability recon-
+struction strategy [29] into the teacher model’s target to
+construct a future-aware optimization target. Concretely,
+for regions inR 1, the background probability from the old-
+class teacher is refined through the intermediate teacher,
+whereas for regions inR2, the background estimation of the
+intermediate teacher is corrected using the old-class teacher:
+ˆ pc,imr =p c,imr ·p b,t−1r , r∈ R 1,
+ˆ pc,t−1r =p c,t−1r ·p b,imr , r∈ R 2, (2)
+wherep c,imr represents probability distribution of the fore-
+ground classcgenerated by the intermediate teacher model
+Mimt in the distillation regionr, andp b,t−1r represents the
+background probability distribution estimated by the old
+teacher modelM t−1 in the distillation regionr.
+39937
+
+===== PAGE 4 =====
+Detection Head
+BackBone
+BackBone
+BackBone
+(Ⅰ)FaCHD module (Ⅱ)RPSC module
+Roi Extractor
+RPN
+RPN
+Roi extractor
+Cross New  Prediction
+Classifier
+Retrain
+BackBoneBackBone
+RPN
+ClassifierRPN Roi Extractor
+Classifier
+Old ground truth
+Cross Old Prediction
+New ground truth
+RPN
+Classifier
+Old Prediction
+New Prediction
+:Trainable
+ :Frozen
+ :ROI feature
+:Cross-head predictions :distillation target
+semantic shift
+Old Class Prototype Compensated Prototype
+Roi extractor
+Roi extractor
+New Class Prototype
+Figure 1. Overall framework of FaCHD-RPSC for incremental object detection. (I) The Future-Aware Decoupled Cross-Head Distillation
+(FaCHD) module is introduced, which decodes the ROI features of the student model usingMt andM imt . This decouples the classification
+head of the student model and applies a distillation loss to regularize the backbone network. (II) The Region Prototype Semantic Correction
+(RPSC) module is introduced, which estimates the semantic drift of region prototypes by comparing feature maps ofM t andM t−1 on
+the current dataset. It compensates for the semantic drift of old class prototypes and retrains the classification head ofM t using the
+compensated old prototypes alongside the current prototypes.
+Based on the reconstructed background probabilities, the
+teacher-side distillation target¯ pr is constructed by concate-
+nating the reconstructed background distribution with the
+original foreground class probabilities:
+¯ pr =
+(
+concat
+ 
+ˆ pc,imr ,p c,t−1r , r∈ R1,
+concat
+ 
+ˆ pc,t−1r ,p c,imr , r∈ R2, (3)
+whereconcat(·,·)denotes the concatenation of two proba-
+bility label vectors along the rows.
+To enable decoupled cross-head distillation, the ROI fea-
+tureszextracted from the student model are forwarded
+through the classification heads of both teacher models, pro-
+ducing cross-head predictions:
+pch,t−1 = softmax Ht−1(z),(4)
+pch,im = softmax Himt (z),(5)
+wherep ch,t−1 represents the cross-head prediction ob-
+tained by decoding the ROI features of the student model
+through the classification headH t−1 of the old teacher
+modelM t−1, andp ch,im represents the cross-head predic-
+tion obtained by decoding the ROI features of the student
+model through the classification headH imt of the interme-
+diate teacher modelM imt . Analogous to the teacher-side
+reconstruction, we reconstruct the background component
+of the student’s cross-head predictions:
+ˆ pch,c,imr =p ch,c,imr ·p ch,b,t−1r , r∈ R 1,
+ˆ pch,c,t−1r =p ch,c,t−1r ·p ch,b,imr , r∈ R 2. (6)
+Then, the reconstructed background probability of the
+cross-head predicted labels is connected with the original
+foreground probability distribution, resulting in the student
+model’s joint cross-head predicted labels¯pchi :
+¯ pchr =
+(
+concat
+ 
+ˆ pch,c,imr ,p ch,c,t−1r , r∈ R1,
+concat
+ 
+ˆ pch,c,t−1r ,p ch,c,imr , r∈ R2. (7)
+Finally, the FaCHD distillation loss is defined as the
+mean Kullback–Leibler divergence between the future-
+aware teacher targets¯ pr and the student’s joint cross-head
+predictions¯ pchr :
+LFaCHD = 1|R| Xr∈R KL ¯ pr ∥¯ pchr .(8)
+The overall training objective combines the generic detec-
+tion loss with the distillation term, weighted by a hyperpa-
+rameterα >0:
+Ltotal =L cls +L box +αL FaCHD,(9)
+whereL cls andL bbox denote the stander classification and
+bounding-box regression losses.
+3.4. Region Prototype Semantic Calibration
+Building upon the feature-level regularization achieved by
+FaCHD, RPSC further enhances knowledge preservation at
+the classifier level. RPSC calibrates multi-granularity re-
+gion prototypes and re-trains the classification head after
+the distillation stage, ensuring consistent knowledge reten-
+tion within the unified framework.
+Given an input imagex i, the backbone produces fea-
+ture mapsM f (xi)and the RPN generates region propos-
+alsP=M rpn(Mf (xi)). For any proposalr∈ R, the
+39938
+
+===== PAGE 5 =====
+corresponding RoI featurez i provides the region-level rep-
+resentation used throughout RPSC:
+zi = RoIAlign(r,M f (xi)),(10)
+whereRoIAlign(·,·)performs a spatial alignment of the re-
+gion proposalrby bilinearly interpolating the feature map
+into a fixed-size output. For each classc, a global region
+prototype is obtained as the mean of all RoI features:
+µgc = 1nc
+ncX
+i=1
+zci ,(11)
+wherez ci represents the RoI feature for classcandµ gc de-
+notes the global region prototype, obtained by computing
+the mean of all then c RoI features for classc.
+Since global prototypes may overlook intra-class struc-
+tural variations, we propose to reveal the intra-class local in-
+formation that is difficult to capture by the global prototype.
+Following [39], the local prototypes are constructed by ex-
+amining hypersphere neighborhoods in the feature space.
+Specially, for each RoI featurez cj, we collect its cosine-
+similarity neighbors:
+S cj = zci  sci,j > γ	,(12)
+wheres ci,j = cos(zcj,z ci ),γis a similarity threshold. Based
+on the number of ROI features within each hypersphere,
+the top-Khypersphere domains with the most features are
+greedily selected to obtain the most representative hyper-
+sphere, while ensuring that their centers do not overlap. We
+then compute the mean of the features within the selected
+hyperspheres to obtain a series of local region prototypes
+for classc:
+µℓc = 1|S ck| Xzci ∈S ck zci , k= 1, . . . , K,(13)
+whereS ck denotes the set of hypersphere neighborhoods of
+classccontaining the top-Kfeatures,andz ci represents the
+ROI features within the hypersphere neighborhood.
+Incremental learning inevitably induces semantic drift,
+causing mismatches between old prototypes and the current
+feature space. Following SDC [43], RPSC estimates the
+drift by comparing RoI features extracted by the previous
+modelM t−1 and the current modelM t:
+δ=z t −z t−1,(14)
+wherez t denotes the ROI feature map generated by the cur-
+rent modelM t andz t−1 represents the ROI feature map
+produced by the previous modelM t−1.
+Using the obtained difference in feature maps, we can
+compute the Gaussian affinity relative to the old class pro-
+totype and aggregate these offsets to measure the semantic
+drift for classc:
+b∆c =
+P αi,c δP αi,c , α i,c = exp− ∥zt−1 −µ t−1c ∥22σ2c  ,
+(15)
+whereσ c is the variance of the region prototypes for the old
+classc. Then, semantic drift compensation is performed for
+both the global and local prototypes of the old class. Specif-
+ically, the global and local prototypes of each old category
+are compensated in the following manner:
+(
+ˆµgc =µ g,(t−1)c + b∆c, c∈ C1:t−1,
+ˆµℓc =µ ℓ,(t−1)c + b∆c, c∈ C1:t−1. (16)
+For the prototypes of the new categories, since these proto-
+types are directly extracted from the current model, there is
+no semantic drift. Therefore, the global and local prototypes
+of the new categories remain unchanged:
+(
+eµgc =µ g,tc , c∈ Ct,
+eµℓc =µ ℓ,tc , c∈ Ct. (17)
+Prototype-conditioned classification head adaptation.
+After the distillation stage, we freeze the backbone network
+and the RPN to preserve the semantic feature distribution of
+the backbone network, ensuring that our prototypes consis-
+tently align with the current semantic feature distribution,
+and train the classification head independently using the re-
+gion prototypes. For each old class, we concatenate the
+global prototype and the local prototype, denoted asµ t−1.
+Similarly, for each new class, we concatenate the global
+prototype and the local prototype, denoted asµ t.
+Each prototype is fed into the RoI head’s classification
+branch to obtain class probabilities:
+bpt−1c = Softmax H(µt−1,c),(18)
+bptc = Softmax H(µt,c),(19)
+whereH(·)denotes the process of feeding the prototype
+into the classification head to produce the corresponding
+prediction.
+Finally, the classification head is optimized by a
+prototype-based replay loss:
+Lre =−
+X
+c∈C1:t−1
+yc log
+ bpt−1c  −λy c X
+c∈Ct
+log
+ bptc,(20)
+wherey c denotes the ground truth label corresponding to
+the prototype,λis the hyperparameter used to balance the
+replay loss between the new and old classes.
+In practice, Upon completion of distillation, we rely
+solely on prototypes to update the parameters of the clas-
+sification head: at each iteration, a prototype mini-batch is
+forwarded throughH, the loss in (20) is computed, and gra-
+dients are backpropagated to update only the classification
+head. The backbone and RPN remain frozen throughout
+this phase.
+39939
+
+===== PAGE 6 =====
+Table 1. PASCAL VOC 2007 single-step incremental results reported in mAP@0.5. The best number in each row is highlighted inbold;
+methods marked “∗” leverage exemplars.
+Methods Venues 10-10 15-5 19-1 5-15Old New All Old New All Old New All Old New All
+Joint Training - 77.2 76.4 76.8 78.3 72.5 76.8 76.8 77.4 76.8 74.7 77.5 76.8
+Fine-tuning - 9.6 67.4 38.5 11.2 63.4 24.3 12.6 72.5 56.6 0.3 75.4 56.6
+ORE* [15] CVPR21 60.4 68.8 64.6 71.8 58.7 64.6 69.4 60.1 68.9 - - -
+ILOD-Meta* [16] TPAMI21 68.4 64.3 66.3 71.7 55.9 58.7 67.8 70.9 70.2 - - -
+OW-DETR* [12] CVPR22 63.5 67.9 65.7 72.2 59.8 69.1 70.2 62.0 69.8 - - -
+ABR* [24] ICCV23 71.2 72.8 72.0 73.0 65.1 71.0 71.0 69.7 70.9 64.7 71.0 69.4
+GMDP-ABR* [38] ICLR24 72.1 73.2 72.7 75.8 65.5 73.2 74.8 70.1 74.6 67.1 71.9 70.7
+Faster ILOD [31] NeurIPS15 69.8 54.5 62.1 71.6 56.9 67.9 68.9 61.1 68.5 62.0 37.1 43.3
+PPAS [55] Arxiv20 63.5 60.0 61.8 - - - 70.5 53.0 69.2 - - -
+MMA [3] CVPR22 69.3 63.9 66.6 73.0 60.5 69.9 71.1 63.4 70.7 66.8 57.2 59.6
+ROSETTA [40] CVPR22 67.6 66.0 66.8 71.7 61.6 69.8 69.768.3 69.6 - - -
+PseudoRM [42] MM23 69.1 68.6 68.9 73.4 60.9 70.3 72.9 67.3 72.6 - - -
+PROB [47] CVPR23 66.0 67.2 66.5 73.5 60.8 70.1 73.9 48.5 72.6 - - -
+BPF [30] ECCV24 71.7 74.0 72.9 75.9 63.0 72.7 74.5 65.3 74.1 66.4 75.3 73.0
+GMDP-ILOD [37] ICLR25 71.9 69.7 70.8 74.6 63.5 71.8 74.2 67.9 73.9 65.2 60.5 75.6
+GDA-IOD [28] ICCV25 75.1 74.6 74.9 77.1 63.2 73.6 76.1 58.4 75.2 69.2 75.8 74.1
+Ours - 76.0 75.9 75.9 78.4 65.0 75.1 76.8 58.5 75.9 71.2 77.6 76.0
+Table 2. Quantitative comparison on the MS COCO benchmark.
+Methods employing rehearsal strategies (marked with∗) are dis-
+tinguished for fair comparison.
+Methods 40+40 70+10AP AP 50 AP75 AP AP 50 AP75
+Joint Training 40.2 61.5 44.2 40.2 61.5 44.2
+ILOD-Meta∗ [16] 23.8 40.5 24.4 - - -
+ABR∗ [24] 34.5 57.8 35.2 31.1 52.9 32.7
+NSGP-RePRE∗ [39] 35.4 55.3 38.6 36.5 56.0 39.8
+Faster ILOD [31] 20.6 40.1 - 21.3 39.9 -
+PseudoRM [42] 25.3 44.4 - - - -
+MMA [3] 33.056.634.6 30.2 52.1 31.5
+BPF [29] 34.4 54.3 37.3 36.2 56.8 38.9
+Ours 35.555.738.9 36.9 57.1 40.1
+4. Experiments
+4.1. Experimental Settings
+Dataset and evaluation metrics. We conduct experiments
+on two widely adopted benchmarks for incremental object
+detection: Pascal VOC 2007 [9] and MS COCO 2017 [20].
+The Pascal VOC 2007 dataset comprises 9,963 images an-
+notated with bounding boxes spanning 20 object categories,
+while MS COCO 2017 contains over 118K images with an-
+notations for 80 categories.
+In the incremental learning setup, we denote a task se-
+quence as “A–B”, where the initial stage involvesAclasses
+and each subsequent step introducesBnew classes. Fol-
+lowing previous studies [4, 24, 29, 31, 41], categories are
+partitioned alphabetically to form non-overlapping subsets.
+Each image in datasetD t contains at least one instance be-
+longing to the corresponding category setC t.
+For evaluation, we follow the standard protocol used in
+continual object detection. Consistent with prior work [42,
+47], we report the mean Average Precision (mAP) com-
+puted across Intersection-over-Union (IoU) thresholds from
+0.5to0.95, together with AP 75 for COCO-based experi-
+ments. For Pascal VOC–based settings, performance is as-
+sessed using the AP 50 metric. Notably, our method per-
+forms incremental object detection without employing ex-
+emplar replay, ensuring a fair comparison with recent ap-
+proaches.
+Implementation Details.. In line with prior studies, we
+develop our incremental object detection model based on
+Faster R-CNN [33] using a ResNet-50 backbone [14], ini-
+tialized with weights pre-trained on ImageNet [7]. For the
+VOC (10-10) benchmark, we configure the hyperparame-
+ters asα= 20andλ= 0.4. All experiments on the VOC
+dataset are carried out on a single NVIDIA GeForce RTX
+3090 GPU with a batch size of 16, utilizing PyTorch and the
+SGD optimizer.
+4.2. Comparison with Sate-of-the-art Methods
+As shown in Tables 1 and tab 3, our method outperforms
+existing approaches in both single-incremental and multi-
+incremental settings. In the challenging 19+1 setting, our
+39940
+
+===== PAGE 7 =====
+Table 3. The mAP@0.5 results across multiple incremental steps on the PASCAL VOC 2007 dataset are presented, with the best perfor-
+mance in each step highlighted inbold. Methods marked with “∗” utilize exemplars.
+Methods Venues 10-5 5-5 10-2 15-11-10 11-20 1-20 1-5 6-20 1-20 1-10 11-20 1-20 1-15 16-20 1-20
+Joint Training - 76.9 76.0 76.4 73.6 77.4 76.4 76.9 76.0 76.4 78.3 70.7 76.4
+Fine-tuning - 5.3 30.6 18.0 0.5 18.3 13.8 3.8 13.6 8.7 0.0 10.5 5.3
+ABR∗ [24] ICCV23 68.7 67.1 67.9 64.7 56.4 58.4 67.0 58.1 62.6 68.7 56.7 65.7
+GMDP-ABR∗ [38] ICLR25 69.9 67.8 68.9 66.359.3 61.1 67.658.9 63.3 69.558.9 66.9
+Faster ILOD [31] NeurIPS15 68.3 57.6 63.1 55.7 16.0 25.9 64.2 48.6 56.4 66.9 44.5 61.3
+MMA [3] CVPR22 66.7 61.8 64.2 62.3 31.2 38.9 65.0 53.1 59.1 68.3 54.3 64.1
+BPF [30] ECCV24 69.1 68.2 68.7 60.6 63.1 62.5 68.7 56.3 62.5 71.5 53.1 66.9
+GMDP-ILOD [37] ICLR25 68.1 62.3 65.2 61.1 35.8 42.1 64.2 53.3 58.8 66.8 50.4 62.7
+GDA-IOD [28] ICCV25 71.3 67.2 69.3 62.2 63.9 63.5 - - - 72.4 50.4 67.2
+Ours - 72.2 70.8 71.5 63.268.1 66.9 68.857.1 62.9 76.541.3 67.7
+Table 4. Ablation study on each component.
+Idx FaCHD RPSC VOC(10-10) VOC(10-5) VOC(5-5)1-10 11-20 1-20 1-10 11-15 16-20 1-20 1-5 6-10 11-15 16-20 1-20
+(a) – – 75.4 73.8 74.6 70.6 75.2 59.2 68.9 47.2 64.0 76.3 56.4 61.0
+(b) ✓– 75.7 75.0 75.4 71.4 78.3 61.7 70.7 62.8 66.0 74.8 58.6 65.5
+(c) –✓ 75.8 74.0 74.9 70.7 76.6 61.4 70.0 49.4 63.2 75.8 57.1 61.4
+(d) ✓ ✓ 76.0 75.9 75.9 72.2 78.4 63.0 71.5 63.2 67.0 76.7 60.6 66.9
+results reached 75.9%, surpassing GMDP-ILOD [37] by
+2%. In the long-duration multi-incremental setting, such as
+5-5, our method achieved 66.9%, outperforming BPF [29]
+and GMDP-ABR [24] by 4.4% and 5.8%, respectively,
+demonstrating the superiority of our approach in long-term
+incremental learning. Notably, in the 10-10 setting, our
+method improves the mAP on old and new tasks by 0.9%
+and 1.3%, respectively, compared to GDA-IOD [28]. This
+indicates that our approach achieves better stability without
+sacrificing plasticity.
+For the MS COCO 2017 dataset, we present the incre-
+mental results for the first 40 + last 40 and first 70 + last 10
+settings in Table 2. By applying FaCHD to impose explain-
+able constraints on the detector region features for both old
+and new tasks, and utilizing ROI prototype replay with se-
+mantic shift compensation to retain knowledge from previ-
+ous tasks in the classification head, GDA-IOD consistently
+surpasses rehearsal-free methods. Specifically, in the 40+40
+and 70+10 scenarios, our method achieved the highest AP
+of 35.5% and 36.9%, respectively, demonstrating its supe-
+rior performance.
+4.3. Ablation Study
+We conduct extensive ablation studies to validate the effec-
+tiveness of the key components in our method.
+Contributions of individual components.As shown
+in Tab 4, we progressively add each component under the
+VOC 10–10, VOC 10–5, and the more challenging VOC
+5–5 settings. We first reproduce a baseline model (a) that
+adopts a pseudo-labeling strategy augmented with a Gaus-
+sian Mixture Model [28]. The results in Tab. 4 demon-
+strate that the proposed FaCHD is effective across incre-
+mental settings. Under the 10-10 setting, our method
+achieves a 1.2% performance gain on classes 11–20, while
+maintaining strong retention of knowledge from previously
+learned classes. This indicates that decoupling the stu-
+dent’s ROI features using two frozen teachers, the old
+model and an intermediate model, and distilling them with
+a background-fusion strategy allows FaCHD to both retain
+old-class knowledge and maintain robust learning on new
+classes.In the 10–5 scenario, FaCHD boosts mAP by 1.8%,
+and in the 5–5 scenario it achieves a 4.5% gain. Moreover,
+compared with model (b), model (d)—which integrates ROI
+prototypes with semantic-drift compensation—consistently
+performs better across all incremental settings. These re-
+sults suggest that our drift-compensated ROI prototypes,
+coupled with retraining of the classification head, effec-
+tively preserve memory of old classes and mitigate catas-
+trophic forgetting.
+Comparison with DwF.To validate the effectiveness
+39941
+
+===== PAGE 8 =====
+Table 5. Ablation study between FaCHD and DwF.
+Methods 10-10 5-15 19-1 10-51-10 11-20 1-20 1-5 6-20 1-20 1-19 20 1-20 1-10 11-15 16-20 1-20
+BaseLine 75.4 73.8 74.6 68.2 76.3 74.2 74.9 62.9 74.3 70.6 75.2 59.2 68.9
+DwF++ 75.2 74.9 75.0 69.1 76.9 74.9 76.2 52.3 75.0 71.5 76.8 60.9 70.2
+FaCHD 75.7 75.0 75.4 69.0 77.5 75.4 77.1 46.0 75.6 71.4 78.3 61.7 70.7
+of the FaCHD method in decoupling the classification
+head and performing distillation, we compare FaCHD with
+DwF [29]. Since the dynamic pseudo-label strategy has not
+been widely used in previous studies, we introduce the dy-
+namic pseudo-label strategy into DwF for a fair comparison,
+denoted as DwF++. The DwF method directly computes
+the distillation loss by connecting the predicted labels of the
+student model with the reconstructed background probabil-
+ities of the teacher model, without considering the poten-
+tial conflict between the new class supervisory signal and
+the distillation supervisory signal on the classification head.
+In contrast, our FaCHD method decouples the classifica-
+tion head, with the distillation loss primarily regularizing
+the backbone network. Under four different settings, our
+method consistently outperforms DwF++ by 0.4%,0.5%,
+0.6%, and 0.5% in mAP, respectively, highlighting the su-
+periority of decoupled cross-head distillation over the DwF
+method in incremental object detection.
+Hyper-parameterλandα..We analyzed the impact of
+two key hyperparameters,αandλ. The hyperparameterα
+in Eq.(9) controls the strength of distillation during training.
+As shown in Figure 2, the best performance in the VOC10-
+10 incremental setting occurs whenαis set to 20. Notably,
+asαincreases from 5 to 20, both the mAP for old and new
+classes improve, indicating that our method not only helps
+the model retain knowledge of old classes but also provides
+good plasticity for learning new classes. Whenαexceeds
+20, performance starts to decline, which we hypothesize is
+due toα >20hindering the model’s convergence.
+Additionally, we analyzed the hyperparameterλEq.(20),
+which controls the loss ratio between the new and old re-
+gion prototypes involved in retraining the model’s classi-
+fication head. As shown in Figure 2, our model achieves
+the best performance on VOC10-10 whenλis set to 0.4.
+Although the impact of differentλvalues on performance
+varies slightly, the model overall demonstrates strong ro-
+bustness.
+5. Conclusion
+In this work, we address the core challenges of incremen-
+tal object detection by mitigating the conflict between new-
+task supervision and distillation signals in the classification
+head, while simultaneously improving knowledge retention.
+We introduce Future-Aware Decoupled Cross-Head Distil-
+Figure 2. Ablation experiments with varyingαin Eq. (9) andλin
+Eq (20) on VOC 10-10.
+lation, which decouples the student model’s classification
+head and regularizes the backbone through targeted distilla-
+tion. To further preserve knowledge of previously learned
+classes, we propose Region Prototype Semantic Calibra-
+tion, a mechanism that estimates semantic drift by compar-
+ing feature-map discrepancies across models and compen-
+sates for outdated region prototypes. These calibrated pro-
+totypes enable effective deduplicated training of the clas-
+sification head. In future research, we plan to explore
+more flexible prototype modeling that adapts continuously
+across tasks, extend our framework to long-tail and open-
+vocabulary detection scenarios, and investigate cross-modal
+or self-supervised signals to further enhance robustness un-
+der large domain or appearance shifts.
+Acknowledgements.This work was supported in part
+by the National Key R&D Program of China under Grant
+No.2023YFA1008600, in part by the National Natural
+Science Foundation of China under Grants 62576262,
+U22A2096, 62576282, in part by the Key R&D Program
+of Shaanxi Province (grant 2024GX-YBXM135, 2024SF-
+YBXM-647),in part by the Fundamental Research Funds
+for the Central Universities (Grant QTZX25083), in part by
+Scientific and Technological Innovation Teams in Shaanxi
+Province under grant 2025RS-CXTD-011, in part by the
+Shaanxi Province Core Technology Research and Develop-
+ment Project under grant 2024QY2-GJHX-11, in part by
+CCF-Kuaishou Large Model Explorer Fund (NO.2025006).
+39942
+
+===== PAGE 9 =====
+References
+[1] Rahaf Aljundi, Francesca Babiloni, Mohamed Elhoseiny,
+Marcus Rohrbach, and Tinne Tuytelaars. Memory aware
+synapses: Learning what (not) to forget. InProceedings of
+the European conference on computer vision (ECCV), pages
+139–154, 2018. 2
+[2] Rahaf Aljundi, Klaas Kelchtermans, and Tinne Tuyte-
+laars. Task-free continual learning. InProceedings of
+the IEEE/CVF conference on computer vision and pattern
+recognition, pages 11254–11263, 2019. 2
+[3] Fabio Cermelli, Andrea Geraci, Davide Fontanel, and Bar-
+bara Caputo. Modeling missing annotations for incremental
+learning in object detection. InCVPR Workshops, 2022. 6, 7
+[4] Fabio Cermelli, Antonino Geraci, Dario Fontanel, and Bar-
+bara Caputo. Modeling missing annotations for incremental
+learning in object detection. InProceedings of the IEEE/CVF
+conference on computer vision and pattern recognition,
+pages 3700–3710, 2022. 3, 6
+[5] De Cheng, Yubo Li, Chaowei Fang, Shizhou Zhang, Nan-
+nan Wang, and Xinbo Gao. Isolating interference factors for
+robust cloth-changing person re-identification.IEEE Trans-
+actions on Pattern Analysis and Machine Intelligence, 2026.
+1
+[6] De Cheng, Zhipeng Xu, Xinyang Jiang, Dongsheng Li, Nan-
+nan Wang, and Xinbo Gao. Prompt disentanglement via
+language guidance and representation alignment for domain
+generalization.IEEE Transactions on Pattern Analysis and
+Machine Intelligence, 2026. 2
+[7] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li,
+and Li Fei-Fei. Imagenet: A large-scale hierarchical image
+database. In2009 IEEE conference on computer vision and
+pattern recognition, pages 248–255. Ieee, 2009. 6
+[8] Na Dong, Yongqiang Zhang, Mingli Ding, and Gim Hee Lee.
+Bridging non co-occurrence with unlabeled in-the-wild data
+for incremental object detection.Advances in Neural Infor-
+mation Processing Systems, 34:30492–30503, 2021. 1, 2
+[9] Mark Everingham, Luc Van Gool, Christopher KI Williams,
+John Winn, and Andrew Zisserman. The pascal visual object
+classes (voc) challenge.International journal of computer
+vision, 88(2):303–338, 2010. 1, 6
+[10] Pedro F Felzenszwalb, Ross B Girshick, David McAllester,
+and Deva Ramanan. Object detection with discriminatively
+trained part-based models.IEEE transactions on pattern
+analysis and machine intelligence, 32(9):1627–1645, 2009.
+1
+[11] Tianxiang Feng, Meng Wang, and Haoyu Yuan. Overcom-
+ing catastrophic forgetting in incremental object detection
+via elastic response distillation. InCVPR, 2022. 1, 2
+[12] Akshita Gupta, Sanath Narayan, KJ Joseph, Salman Khan,
+Fahad Shahbaz Khan, and Mubarak Shah. Ow-detr:
+Open-world detection transformer. InProceedings of
+the IEEE/CVF conference on computer vision and pattern
+recognition, pages 9235–9244, 2022. 6
+[13] Yu Hao, Yanwei Fu, Yu-Gang Jiang, and Qi Tian. An end-to-
+end architecture for class-incremental object detection with
+knowledge distillation. In2019 IEEE International Con-
+ference on Multimedia and Expo (ICME), pages 1–6. IEEE,
+2019. 1
+[14] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun.
+Deep residual learning for image recognition. InProceed-
+ings of the IEEE conference on computer vision and pattern
+recognition, pages 770–778, 2016. 6
+[15] KJ Joseph, Salman Khan, Fahad Shahbaz Khan, and Vi-
+neeth N Balasubramanian. Towards open world object de-
+tection. InProceedings of the IEEE/CVF conference on
+computer vision and pattern recognition, pages 5830–5840,
+2021. 6
+[16] KJ Joseph, Jathushan Rajasegaran, Salman Khan, Fa-
+had Shahbaz Khan, and Vineeth N Balasubramanian. Incre-
+mental object detection via meta-learning.IEEE Transac-
+tions on Pattern Analysis and Machine Intelligence, 44(12):
+9209–9216, 2021. 6
+[17] James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, and et
+al. Overcoming catastrophic forgetting in neural networks.
+PNAS, 2017. 2
+[18] Sang-Woo Lee, Jin-Hwa Kim, Jaehyun Jun, Jung-Woo Ha,
+and Byoung-Tak Zhang. Overcoming catastrophic forget-
+ting by incremental moment matching.Advances in neural
+information processing systems, 30, 2017. 2
+[19] Zhizhong Li and Derek Hoiem. Learning without forgetting.
+InECCV, 2016. 2
+[20] Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays,
+Pietro Perona, Deva Ramanan, Piotr Doll´ar, and C Lawrence
+Zitnick. Microsoft coco: Common objects in context. In
+European conference on computer vision, pages 740–755.
+Springer, 2014. 6
+[21] Huihui Liu, Yiding Yang, and Xinchao Wang. Overcoming
+catastrophic forgetting in graph neural networks. InProceed-
+ings of the AAAI conference on artificial intelligence, pages
+8653–8661, 2021. 2
+[22] Xiaoxiao Liu, Huanjing Yang, Avinash Ravichandran, Rahul
+Bhotika, and Stefano Soatto. Multi-task incremental learning
+for object detection. InECCV Workshops, 2020. 2
+[23] Xialei Liu, Hao Yang, Avinash Ravichandran, Rahul
+Bhotika, and Stefano Soatto. Multi-task incremental learn-
+ing for object detection.arXiv preprint arXiv:2002.05347,
+2020. 1
+[24] Yuyang Liu, Yang Cong, Dipam Goswami, Xialei Liu, and
+Joost Van De Weijer. Augmented box replay: Overcoming
+foreground shift for incremental object detection. InPro-
+ceedings of the IEEE/CVF international conference on com-
+puter vision, pages 11367–11377, 2023. 3, 6, 7
+[25] Yuting Liu, Chenghao Yang, Danda Goswami, Xinhai Liu,
+and Joost van de Weijer. Augmented box replay: Over-
+coming foreground shift for incremental object detection. In
+ICCV, 2023. 2
+[26] David Lopez-Paz and Marc’Aurelio Ranzato. Gradient
+episodic memory for continual learning.Advances in neu-
+ral information processing systems, 30, 2017. 2
+[27] Yue Lu, Shizhou Zhang, De Cheng, Yinghui Xing, Nannan
+Wang, Peng Wang, and Yanning Zhang. Visual prompt tun-
+ing in null space for continual learning.Advances in neural
+information processing systems, 37:7878–7901, 2024. 2
+39943
+
+===== PAGE 10 =====
+[28] Wenlong Luo, Shizhou Zhang, De Cheng, Yinghui Xing,
+Guoqiang Liang, Peng Wang, and Yanning Zhang. Gradient
+decomposition and alignment for incremental object detec-
+tion. InProceedings of the IEEE/CVF International Confer-
+ence on Computer Vision, pages 4486–4495, 2025. 6, 7
+[29] Qijie Mo, Yipeng Gao, Shenghao Fu, Junkai Yan, Ancong
+Wu, and Wei-Shi Zheng. Bridge past and future: Overcom-
+ing information asymmetry in incremental object detection.
+InEuropean Conference on Computer Vision, pages 463–
+480. Springer, 2024. 1, 3, 6, 7, 8
+[30] Qiang Mo, Yifan Zhang, Chen Yu, et al. Bridge past and
+future: Overcoming information asymmetry in incremental
+object detection. InECCV, 2024. 2, 6, 7
+[31] Can Peng, Kun Zhao, and Brian C Lovell. Faster ilod: In-
+cremental learning for object detectors based on faster rcnn.
+Pattern recognition letters, 140:109–115, 2020. 1, 6, 7
+[32] Chen Peng, Kai Zhao, and Brian C. Lovell. Faster ilod: In-
+cremental learning for object detectors based on faster r-cnn.
+arXiv:2003.03901, 2020. 2
+[33] Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun.
+Faster r-cnn: Towards real-time object detection with region
+proposal networks. InNeurIPS, 2015. 6
+[34] Konstantin Shmelkov, Cordelia Schmid, and Karteek Ala-
+hari. Incremental learning of object detectors without catas-
+trophic forgetting. InICCV, 2017. 2
+[35] Mingxing Tan, Ruoming Pang, and Quoc V Le. Efficientdet:
+Scalable and efficient object detection. InProceedings of
+the IEEE/CVF conference on computer vision and pattern
+recognition, pages 10781–10790, 2020. 1
+[36] Jiabao Wang, Yuming Chen, Zhaohui Zheng, Xiang Li,
+Ming-Ming Cheng, and Qibin Hou. Crosskd: Cross-head
+knowledge distillation for object detection. InProceedings
+of the IEEE/CVF conference on computer vision and pattern
+recognition, pages 16520–16530, 2024. 2
+[37] Yanjie Wang, Liqun Chen, Tianming Zhao, Tao Zhang,
+Guodong Wang, Luxin Yan, Sheng Zhong, Jiahuan Zhou,
+and Xu Zou. High-dimension prototype is a better incremen-
+tal object detection learner. InThe Thirteenth International
+Conference on Learning Representations. 6, 7
+[38] Y . Wang et al. High-dimension prototype is a better incre-
+mental object detector. InICLR, 2025. 3, 6, 7
+[39] Qirui Wu, Shizhou Zhang, De Cheng, Yinghui Xing, Di Xu,
+Peng Wang, and Yanning Zhang. Demystifying catastrophic
+forgetting in two-stage incremental object detector.arXiv
+preprint arXiv:2502.05540, 2025. 5, 6
+[40] Binbin Yang, Xinchi Deng, Han Shi, Changlin Li, Geng-
+wei Zhang, Hang Xu, Shen Zhao, Liang Lin, and Xiao-
+dan Liang. Continual object detection via prototypical task
+correlation guided gating mechanism. InProceedings of
+the IEEE/CVF conference on computer vision and pattern
+recognition, pages 9255–9264, 2022. 6
+[41] Dongbao Yang, Yu Zhou, Aoting Zhang, Xurui Sun, Dayan
+Wu, Weiping Wang, and Qixiang Ye. Multi-view correlation
+distillation for incremental object detection.Pattern Recog-
+nition, 131:108863, 2022. 6
+[42] Dongbao Yang, Yu Zhou, Xiaopeng Hong, Aoting Zhang,
+Xin Wei, Linchengxi Zeng, Zhi Qiao, and Weipinng Wang.
+Pseudo object replay and mining for incremental object de-
+tection. InProceedings of the 31st ACM International Con-
+ference on Multimedia, pages 153–162, 2023. 3, 6
+[43] Lu Yu, Bartlomiej Twardowski, Xialei Liu, Luis Herranz,
+Kai Wang, Yongmei Cheng, Shangling Jui, and Joost van de
+Weijer. Semantic drift compensation for class-incremental
+learning. InProceedings of the IEEE/CVF conference on
+computer vision and pattern recognition, pages 6982–6991,
+2020. 5
+[44] Friedemann Zenke, Ben Poole, and Surya Ganguli. Contin-
+ual learning through synaptic intelligence. InInternational
+conference on machine learning, pages 3987–3995. PMLR,
+2017. 2
+[45] Shizhou Zhang, Yue Lu, De Cheng, Yinghui Xing, Nan-
+nan Wang, Peng Wang, and Yanning Zhang. Vpt-nsp 2++:
+Importance-aware visual prompt tuning in null space for con-
+tinual learning.IEEE Transactions on Pattern Analysis and
+Machine Intelligence, 2025. 2
+[46] Wang Zhou, Shiyu Chang, Norma Sosa, Hendrik Hamann,
+and David Cox. Lifelong object detection.arXiv preprint
+arXiv:2009.01129, 2020. 1
+[47] Orr Zohar, Kuan-Chieh Wang, and Serena Yeung. Prob:
+Probabilistic objectness for open world object detection. In
+Proceedings of the IEEE/CVF Conference on Computer Vi-
+sion and Pattern Recognition, pages 11444–11453, 2023. 6
+39944
