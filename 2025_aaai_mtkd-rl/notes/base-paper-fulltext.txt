@@ -1,0 +1,1123 @@
+
+===== PAGE 1 =====
+Multi-Teacher Knowledge Distillation with Reinforcement Learning for Visual
+Recognition
+Chuanguang Yang1, Xinqiang Yu1,2, Han Yang1,2, Zhulin An1*, Chengqing Yu1,2, Libo Huang1,
+Yongjun Xu1
+1Institute of Computing Technology, Chinese Academy of Sciences, Beijing, China
+2University of Chinese Academy of Sciences, Beijing, China
+{yangchuanguang,yuxinqiang21s,yanghan22s,anzhulin,yuchengqing22b,huanglibo,xyj}@ict.ac.cn
+Abstract
+Multi-teacher Knowledge Distillation (KD) transfers diverse
+knowledge from a teacher pool to a student network. The
+core problem of multi-teacher KD is how to balance distil-
+lation strengths among various teachers. Most existing meth-
+ods often develop weighting strategies from an individual
+perspective of teacher performance or teacher-student gaps,
+lacking comprehensive information for guidance. This paper
+proposes Multi-Teacher Knowledge Distillation with Rein-
+forcement Learning (MTKD-RL) to optimize multi-teacher
+weights. In this framework, we construct both teacher per-
+formance and teacher-student gaps as state information to an
+agent. The agent outputs the teacher weight and can be up-
+dated by the return reward from the student. MTKD-RL rein-
+forces the interaction between the student and teacher using
+an agent in an RL-based decision mechanism, achieving bet-
+ter matching capability with more meaningful weights. Ex-
+perimental results on visual recognition tasks, including im-
+age classification, object detection, and semantic segmenta-
+tion tasks, demonstrate that MTKD-RL achieves state-of-the-
+art performance compared to the existing multi-teacher KD
+works.
+Code — https://github.com/winycg/MTKD-RL
+Introduction
+Deep neural networks (Yang et al. 2020; Touvron et al.
+2021b; Liang et al. 2024b,a) have achieved excellent per-
+formance for visual recognition tasks, but accompanied by
+the growth of computation complexity and memory foot-
+print. Knowledge Distillation (KD) (Hinton, Vinyals, and
+Dean 2015; Zhang et al. 2023) becomes an effective way
+to improve a low-complexity student network, and has been
+widely applied to image classification (Yang et al. 2022b,
+2023a), object detection (Li et al. 2024), segmentation (Yang
+et al. 2022c) and generation (Feng et al. 2024). The con-
+ventional KD often investigates a single teacher to transfer
+knowledge to a student. Compared to the single-teacher KD,
+multi-teacher KD (Zhang, Chen, and Wang 2022, 2023) pro-
+vides more comprehensive and diverse knowledge, increas-
+ing the upper bound of student performance.
+*Corresponding author
+Copyright © 2025, Association for the Advancement of Artificial
+Intelligence (www.aaai.org). All rights reserved.
+Although multi-teacher KD could lead to more signif-
+icant improvements, it is more challenging since balanc-
+ing distillation strengths among various teachers is a non-
+trivial problem. The vanilla multi-teacher KD assigns equal
+weights to distill a student (You et al. 2017). However, the
+equal distillation strength ignores two critical aspects: (1)
+teacher performance: various teachers may perform differ-
+ently on the same data sample; (2) teacher-student gaps: a
+more powerful teacher may not result in a better student,
+because a simple student may not have enough capacity to
+mimic a large teacher, as discussed by Cho et al. (Cho and
+Hariharan 2019). Previous multi-teacher KD methods of-
+ten explore weight generation from an individual perspec-
+tive of the aspect (1) teacher performance (e.g. information
+entropy (Kwon et al. 2020; Zhang, Chen, and Wang 2022)
+and logits (Zhang, Chen, and Wang 2023)) or the aspect (2)
+teacher-student gaps, reflecting in gradient space (Du et al.
+2020) and similarity matrix (Liu, Zhang, and Wang 2020).
+However, these methods only consider a single aspect to
+generate multi-teacher weights but neglect a comprehensive
+interaction among the teacher, student, and data samples.
+This paper proposes Multi-Teacher Knowledge Distilla-
+tion with Reinforcement Learning (MTKD-RL) to optimize
+the multi-teacher weight generation problem. The overview
+of MTKD-RL is illustrated in Fig.1. We formulate multi-
+teacher KD training as a Reinforcement Learning (RL) opti-
+mization process. We introduce an agent to output the action
+of multi-teacher weights according to the state information.
+The state, including teacher information (feature, logit, and
+cross-entropy loss) and teacher-student gaps (feature simi-
+larity and logit KL-divergence), encodes evidence of both
+the aspect (1) and (2), respectively. We use the student per-
+formance and teacher-student gaps as rewards to update the
+agent by policy gradient algorithm. The framework alter-
+natively performs multi-teacher KD and agent optimization
+until the student is converged.
+Compared to previous multi-teacher KD works, our
+method constructs teacher performance and teacher-student
+gaps as prompts, covering the aspect (1) and (2). MTKD-
+RL reinforces the interaction between the student and
+teacher using an agent in an RL-based decision mechanism,
+achieving better matching capability with more meaningful
+weights. Experimental results on image classification tasks
+demonstrate that MTKD-RL performs better than previous
+arXiv:2502.18510v1  [cs.CV]  22 Feb 2025
+
+===== PAGE 2 =====
+TeacherPerformance Teacher-StudentGaps
+State Agent
+Weight1
+Weight2
+Action
+Reward:StudentPerformance&Teacher-StudentGaps
+&
+TeacherNetworks
+InputImage InputImage
+TeacherNet1
+TeacherNet2
+StudentNetwork
+Distillation
+Figure 1: Overview of the basic idea about our proposed MTKD-RL.
+state-of-the-art multi-teacher KD works. Extensive exper-
+iments on downstream object detection and semantic seg-
+mentation show that MTKD-RL guides the student to learn
+better features for dense prediction tasks.
+The contributions are two-fold: (1) we propose MTKD-
+RL, an RL-based method to generate meaningful multi-
+teacher KD weights by reinforcing the interaction between
+the student and teacher. (2) Experimental results on visual
+recognition tasks show that MTKD-RL achieves state-of-
+the-art performance.
+Related Work
+Multi-Teacher Knowledge Distillation
+The conventional KD framework (Hinton, Vinyals, and
+Dean 2015; Yang et al. 2021, 2022a,c, 2024) often improves
+a student network taught by a high-capacity teacher. How-
+ever, the student performance may be bounded by a single
+teacher due to limited knowledge. Many works attempted
+to rely on multiple teacher networks for knowledge transfer.
+The core question of multi-teacher KD is how to balance the
+weights among various teacher networks. A straightforward
+method (You et al. 2017) is to assign an equal weight to each
+teacher, but it may ignore the diversity of teachers and lead
+to suboptimum performance.
+Some subsequent works explore better multi-teacher KD
+algorithms with meaningful balancing weights. AE-KD (Du
+et al. 2020) formulates multi-teacher KD as a multi-
+objective optimization problem and derives the weight so-
+lutions from the perspective of gradient space. AMTML-
+KD (Liu, Zhang, and Wang 2020) introduces a latent factor
+for each teacher and calculates teacher importance by mak-
+ing an element-wise product with the student max-pooled
+features. EB-KD (Kwon et al. 2020) computes aggrega-
+tion weights according to information-entropy, since the en-
+tropy measures the confidence of a teacher predictive distri-
+bution. However, EB-KD may assign an inaccurate weight
+when the teacher’s predictive category is not correct. To
+address this problem, CA-MKD (Zhang, Chen, and Wang
+2022) introduces cross-entropy complemented by ground-
+truth labels to guarantee the correct category guidance. In-
+stead of exploiting probability-level information, the recent
+MMKD (Zhang, Chen, and Wang 2023) introduces a meta-
+learning mechanism (Finn, Abbeel, and Levine 2017) with
+a hard buffer to optimize aggregation weights of both the
+teachers’ features and logits. Although both MOBA (Kang
+et al. 2022) and RMTS (Yuan et al. 2021) involve RL and
+distillation, they have essential distinctions compared to
+MTKD-RL in solved tasks . MOBA boosts RL models in
+continuous control tasks,e.g. games and robotics. RMTS en-
+hances BERT models for natural language processing tasks.
+Our MTKD-RL improves CNN or ViT models for visual
+recognition tasks. More references about multi-teacher KD
+works could refer to this survey (Yang et al. 2023b).
+Although previous multi-teacher KD methods achieve
+good performance gains, they often consider a single level
+to optimize teacher weights. Moreover, they neglect the in-
+teraction between ensemble teachers and the student, es-
+pecially student accuracy as a critical indicator. Therefore,
+the generated weights may not reflect the comprehensive
+capability of teachers and lack compatibility with a spe-
+cific student. By contrast, our MTKD-RL method constructs
+both the teacher performance and teacher-student gaps as
+the state, optimized by the student performance as rewards,
+leading to more meaningful teacher weights.
+Reinforcement Learning
+Reinforcement Learning (RL) has achieved great success in
+decision-making (Kaelbling, Littman, and Moore 1996; Liu
+et al. 2020; Chengqing et al. 2023). The basic framework of
+the RL system (Mnih et al. 2013; Van Hasselt, Guez, and
+Silver 2016) is to maximize the reward achieved by an agent
+when interacting with the environment. During RL training,
+the agent outputs an action using the observed state from the
+environment. After action execution, the RL system updates
+the agent according to the returned reward. The RL loop it-
+erates on episodes until the agent converges.
+The RL optimization can be divided into value-based (e.g.
+DQN (Mnih et al. 2013) and DDQN (Van Hasselt, Guez,
+and Silver 2016)) and policy-based ( e.g. PG (Sutton et al.
+1999) and PPO (Schulman et al. 2017)) algorithms. Value-
+based RL often selects an action with the maximum Q-
+value. Policy-based RL constructs a probability distribution
+
+===== PAGE 3 =====
+to sample an action. Compared with value-based RL, policy-
+based RL has two advantages: (1) it is more compatible with
+continuous action space; (2) it avoids policy degradation
+since it does not have value function errors in value-based
+RL. Based on the above analyses, policy-based RL is more
+suitable for optimizing continuous multi-teacher weights as
+action space. Policy Gradient (PG) (Sutton et al. 1999) uses
+reward from the observed state to optimize the action pol-
+icy. In the conventional RL system, the original PG may
+be difficult to converge due to the large gradient variance.
+Some advanced variants are proposed to improve PG based
+on actor-critic (e.g. DPG (Silver et al. 2014) and DDPG (Lil-
+licrap et al. 2015)) and trust region ( e.g. PPO (Schulman
+et al. 2017)).
+As shown in Table 6, we found that the multi-teacher de-
+cision is not sensitive to PG algorithms. One possible reason
+is that the gradient optimization of multi-teacher decisions
+with a fixed visual dataset is more stable than the conven-
+tional RL environment. Therefore, we choose the original
+PG to optimize multi-teacher weights. Notice that this paper
+focuses on a unified framework of multi-teacher KD with
+RL instead of proposing a new RL algorithm.
+Methodology
+Preliminary of Multi-Teacher KD
+The standard KD transfers knowledge from a teacher net-
+work T to a student network S. The framework is often
+formulated as Equ.(1), including a basic task loss, logit KD
+loss, and feature KD loss.
+LKD = H(ySi , yi)| {z }
+task loss
++α DKL (ySi , yTi )| {z }
+logit KD loss
++β Ddis(F Si , F Ti )| {z }
+f eature KD loss
+.
+(1)
+yi is the ground-truth label of thei-th sample. ySi and yTi are
+predictive logits from the student and teacher, respectively.
+F Si and F Ti are features from the student and teacher, re-
+spectively.H denotes cross-entropy function.DKL indicates
+Kullback-Leibler divergence to measure the discrepancy of
+student and teacher probability distributions. Ddis is a dis-
+tance metric to measure the similarity of student and teacher
+features. α and β are loss weights for logit KD and feature
+KD losses, respectively.
+When extending to multi-teacher KD, each teacher net-
+work transfers knowledge to the same student network, re-
+sulting in the total loss as Equ.(2).
+LM T KD= H(ySi , yi)| {z }
+task loss
++α
+MX
+m=1
+wml,iDKL (ySi , yTmi )
+| {z }
+logit KD loss
++ β
+MX
+m=1
+wmf,iDdis(F Si , F Tmi )
+| {z }
+f eature KD loss
+. (2)
+Here, M is the number of networks in the teacher pool
+{Tm}Mm=1. This paper focuses on optimizing the teacher
+weights {wmi = [ wml,i, wmf,i]}Mm=1 using reinforcement
+learning, as shown in the next section. Without bells and
+whistles, we use the traditional KD (Hinton, Vinyals, and
+Dean 2015) as the logit KD loss and FitNet (Romero et al.
+2014) as the feature KD loss by default. We set α = 1 and
+β = 5, as analysed in Fig.2. More advanced logit KD losses
+(e.g. DIST (Huang et al. 2022)) and feature KD losses ( e.g.
+ND (Wang et al. 2025)) could also be applied in Equ.(2),
+which are orthogonal to our multi-teacher KD framework.
+RL-based Multi-Teacher Weights Optimization
+In this section, we propose to optimize sample-wise teacher
+weights dynamically using reinforcement learning. As
+shown in Fig.1, we introduce an agent over the training
+graph. The agent interacts with the multi-teacher KD envi-
+ronment. It receives the state information to generate teacher
+weights as the action. We apply teacher weights into Equ.(2)
+to distill the student network. After an episode of training
+samples, the student performance is regarded as the reward
+to optimize agent parameters. The reinforced loop proceeds
+until the student network converges. The instantiation of
+(state,action,reward) in the context of multi-teacher KD is
+shown as follows.
+State In our RL-based framework, the state representation
+of the input sample xi is formulated as an embedding si.
+The state si is a concatenation of teacher performance ( i.e.
+feature representation, logit vector, and cross-entropy loss)
+and teacher-student gaps ( i.e. feature similarity and proba-
+bility KL-divergence). The concrete details are formulated
+as follows.
+(1) Teacher feature representation.Given an input sam-
+ple xi, the m-th teacher’s feature representation after the
+penultimate layer is defined as f Tmi ∈ Rdm, where dm is
+the embedding size of the m-th teacher. The feature repre-
+sentation often encodes semantic information from the input
+sample.
+(2) Teacher logit vector. Given an input sample xi, the
+m-th teacher’s logit vector after the final output layer is de-
+fined as zTmi ∈ RC, where C is the number of classes. The
+logit vector represents the direct prediction of a class confi-
+dence distribution over the complete class space.
+(3) Teacher cross-entropy loss. Given an input sample
+xi with the label yi, the m-th teacher’s cross-entropy loss
+is defined as LTmCE = H(yTmi , yi). The cross-entropy loss
+LTmCE measures the fitting performance between the teacher’s
+prediction and the ground-truth label.
+(4) Teacher-student feature similarity. Given an input
+sample xi, the cosine similarity between the student’s fea-
+ture representation f Si ∈ Rd and the teacher’s feature repre-
+sentation f Tmi ∈ Rdm is formulated as cosine similarity:
+cosTmi = r(f Si ) · f Tmi /||r(f Si )||||f Tmi ||, (3)
+where r(·) is a linear regressor to transform f Si to match
+the embedding size of f Tmi . · is a dot product and || · ||de-
+notes l2 norm. The cosine similarity measures the distance
+gap between the student and teacher in feature space.
+(5) Teacher-student probability KL-divergence. Given
+an input samplexi, the KL-divergence between the student’s
+
+===== PAGE 4 =====
+logit vector ySi ∈ RC and the teacher’s logit vector yTmi ∈
+RC is formulated as:
+KL Tmi = DKL (ySi , yTmi ). (4)
+The KL-divergence measures the discrepancy between the
+student and teacher in class probability space.
+We concatenate (1)∼(5) to construct the state embedding.
+Given an input sample xi, the m-th teacher’s state embed-
+ding is formulated as smi :
+smi = [ f Tmi ∥ zTmi ∥ LTmCE| {z }
+T eacher P erf ormance
+∥ cosTmi ∥ KL Tmi| {z }
+T eacher−Student Gaps
+], (5)
+where ∥ denotes the concatenation operator. Based on com-
+prehensive state information, the agent can make dynamic
+decisions by referring to teacher performance and teacher-
+student gaps among various input samples.
+Action We construct an agent πθm (smi ) for each teacher
+network Tm, where θm denotes the trainable agent parame-
+ters. The agent model πθm(smi ) contains several linear lay-
+ers with a middle ReLU activation function, and finished by
+a softmax function. The output is the teacher weight vec-
+tor wmi , each weight is within (0, 1) in continuous action
+space. The process is formulated as wmi = πθm (smi ). We
+also combine the confidence- and divergence-aware weight
+generation strategies in the action space. The detailed action
+construction is shown in appendix.
+Reward We define an episode as one training batch
+{xi}Bi=1 including B samples. For each sample xi, we con-
+struct the state embedding smi for each teacher network Tm
+and guide the agent πθm(smi ) to produce the teacher weight
+wmi . We perform weighted multi-teacher KD (Equ.(2)) with
+the generated weights {wmi }Mm=1 to train the student net-
+work. The reward function should be relevant to the trained
+student performance after multi-teacher KD weighted by the
+agent. A better student network should have a lower classi-
+fication loss and more similar class probability and feature
+distributions with the teacher. Therefore, we utilize cross-
+entropy loss between the student and ground-truth labels,
+probability KL-divergence loss and feature Mean Squared
+Error (MSE) loss between the student and teacher as evi-
+dence to construct the reward function as Equ.(6):
+Rmi = −H(ySi , yi)−αDKL (ySi , yTmi )−βDdis(F Si , F Tmi ),
+(6)
+where Rmi denotes the reward of the m-th agent over the i-
+th input sample. Here, the reward is defined by the negative
+loss, since a lower loss value indicates a better student.
+Optimize agent with policy gradient Unlike traditional
+supervised learning, RL-based optimization often does not
+know whether the chosen action is correct or not. Therefore,
+policy-based RL often optimizes the agent according to the
+returned reward after making a decision. If an agent earns
+a larger reward after choosing an action, Policy Gradient
+(PG) (Sutton et al. 1999) would increase the corresponding
+gradient derived from this action. We apply PG to optimize
+Algorithm 1: Overall MTKD-RL Training Procedure
+1. Pre-train the student network S by multi-teacher KD following
+LM T KD(Equ.(2)) with equal weights, i.e. {wmi = 1}Mm=1, using
+all training samples xi ∈ D.
+2. Pre-train the agent models {πθm }Mm=1 using the returned re-
+wards {Rmi }Mm=1 with {wmi = 1}Mm=1 as the action for all training
+samples xi ∈ D.
+3. Run Algorithm 2 to alternatively perform multi-teacher KD and
+agent optimization until convergence.
+Algorithm 2: Alternative Multi-Teacher KD and Agent Op-
+timization
+Input: Training dataset D. Pre-trained teacher networks
+{Tm}Mm=1. A student network S. Agent models {πθm}Mm=1.
+Output: Trained student S.
+1: while the student network S is not converged do
+2: Randomly Shuffle D to produce a new batch se-
+quence.
+3: for each batch B ∈ Ddo
+4: Construct state information {smi }Mm=1 following
+Equ.(5) for each sample xi ∈ B, where the batch
+size is B.
+5: Generate multi-teacher weights {wmi }Mm=1 by
+wmi = πθm (smi )
+6: Compute the multi-teacher KD loss LM T KDfol-
+lowing Equ.(2) with generated weights{wmi }Mm=1.
+7: Update the student network S using LM T KD.
+8: Compute rewards {Rmi }Mm=1 following Equ.(6).
+9: Save ({{smi }Mm=1, {wmi }Mm=1, {Rmi }Mm=1}Bi=1) to
+the episode history H.
+10: end for
+11: for each ({{smi }Mm=1, {wmi }Mm=1, {Rmi }Mm=1}Bi=1) ∈
+H do
+12: Update the agent models {πθm}Mm=1 following
+Equ.(7).
+13: end for
+14: end while
+the agent’s parameters, as shown in Equ.(7).
+θm ← −θm − η
+BX
+i=1
+¯Rmi ▽θm πθm (smi ), m= 1, 2, · · ·, M.
+(7)
+¯Rmi is the normalized reward formulated as Equ.(8).
+¯Rmi = Rmi − mink Rkimaxk Rki − mink Rki − 1M MXk=1 Rki . (8)
+Here, k ∈ {1, · · ·, M}. We apply min-max normalization
+to rescale the reward Rmi to (0, 1), and then subtract the
+mean value of M teacher rewards {Rki }Mk=1. The PG would
+lead to a positive update when ¯Rmi > 0, or a negative up-
+date when ¯Rmi < 0. Benefiting from PG optimization, the
+agent prefers adaptively assigning teacher weights accord-
+ing to the reward.
+
+===== PAGE 5 =====
+Overall MTKD-RL Framework
+Algorithm 1 illustrates the overall MTKD-RL training pro-
+cedure. At first, we pre-train the student networkS by multi-
+teacher KD followingLM T KD(Equ.(2)) with equal weights
+for one training epoch. Afterwards, we use the collected
+(state, action, reward) information during multi-teacher KD
+to pre-train the agent models {πθm}Mm=1. After pre-training,
+the RL-loop would start from a good initialization and avoid
+the training collapse problem. Then we run Algorithm 2 to
+alternatively perform multi-teacher KD and agent optimiza-
+tion until convergence.
+As shown in Algorithm 2, for each iterative epoch, we
+freeze the agent models{πθm}Mm=1 and train the student net-
+work S using multi-teacher KD with the generated weights
+from agent models. Then, we utilize the collected (state, ac-
+tion, reward) information during multi-teacher KD to opti-
+mize the agent models {πθm }Mm=1. The alternative training
+proceeds until the student network S is converged.
+Experiments
+Experimental Setup
+Dataset. We use CIFAR-100 (Krizhevsky, Hinton et al.
+2009) and ImageNet (Deng et al. 2009) datasets for im-
+age classification experiments. The object detection exper-
+iments adopt COCO-2017 (Lin et al. 2014) dataset. We uti-
+lize Cityscapes (Cordts et al. 2016), ADE20K (Zhou et al.
+2017) and COCO-Stuff-164K (Caesar, Uijlings, and Ferrari
+2018) datasets for semantic segmentation.
+Compared methods. We compare several methods in
+this experimental section. ’Baseline’ denotes the traditional
+training without distillation. ’A VER (KD+FitNet)’ means
+the multi-teacher KD with equal weights for the tradi-
+tional Hinton’s logit KD loss (Hinton, Vinyals, and Dean
+2015) and Mean Squared Error (MSE)-based feature KD
+loss (Romero et al. 2014). Other compared methods, such
+as AMTML-KD (Liu, Zhang, and Wang 2020), AEKD (Du
+et al. 2020), CA-MKD (Zhang, Chen, and Wang 2022),
+and MMKD (Zhang, Chen, and Wang 2023), are advanced
+strategies to compute multi-teacher KD weights.
+Evaluated networks. Experiments are conducted over
+Convolutional Neural Networks (CNNs) and Vision Trans-
+formers (ViTs). CNNs includes ResNet (He et al. 2016),
+WRN (Zagoruyko S 2016), ResNeXt (Xie et al. 2017), Mo-
+bileNetV2 (Sandler et al. 2018), ShuffleNetv2 (Ma et al.
+2018), and RegNet (Radosavovic et al. 2020). ViTs in-
+cludes CaiT (Touvron et al. 2021b) and DeiT (Touvron et al.
+2021a). More training details are shown in appendix.
+Experimental Results on Image Classification
+Experiments on CIFAR-100.In Table 1, we conduct multi-
+teacher KD experiments on CIFAR-100. Compared to the
+baseline without distillation, even the vanilla A VER (KD)
+with equal weights achieves significant improvements over
+four student networks with an average gain of 2.46%. A VER
+(KD+FitNet) complements feature-level distillation and ob-
+tains an average improvement of 0.68% over the logit-
+level A VER (KD). Previous multi-teacher weight genera-
+tion strategies, such as AMTML-KD, AEKD, CA-MKD,
+Network Params FLOPs Method Acc@1
+Teacher pool
+RegNetY-400MF 5.8M 467.1M
+Pretrained
+78.87
+RegNetX-400MF 4.8M 466.2M 79.15
+ResNet-32x4 7.4M 1083.0M 79.59
+WRN-28-4 5.9M 845.6M 79.37
+Student
+RegNetX-200MF 2.4M 223.4M
+Baseline 77.38±0.23
+A VER (KD) 78.64±0.31
+A VER (KD+FitNet) 79.12±0.28
+AMTML-KD 79.46±0.45
+AEKD 79.22±0.37
+CA-MKD 80.28±0.26
+MMKD 80.15±0.41
+MTKD-RL (Ours) 80.58±0.29
+MobileNetV2 2.4M 22.4M
+Baseline 69.17±0.18
+A VER (KD) 71.85±0.27
+A VER (KD+FitNet) 72.67±0.26
+AMTML-KD 72.89±0.36
+AEKD 72.82±0.42
+CA-MKD 74.16±0.32
+MMKD 74.35±0.34
+MTKD-RL (Ours) 74.63±0.35
+ShuffleNetv2 1.4M 44.5M
+Baseline 72.84±0.15
+A VER (KD) 75.77±0.18
+A VER (KD+FitNet) 76.83±0.34
+AMTML-KD 76.93±0.26
+AEKD 77.08±0.21
+CA-MKD 78.09±0.17
+MMKD 77.87±0.20
+MTKD-RL (Ours) 78.39±0.14
+ResNet-56 0.9M 125.8M
+Baseline 72.52±0.27
+A VER (KD) 73.57±0.29
+A VER (KD+FitNet) 73.93±0.16
+AMTML-KD 74.21±0.33
+AEKD 74.02±0.39
+CA-MKD 75.17±0.24
+MMKD 75.26±0.27
+MTKD-RL (Ours) 75.35±0.33
+Table 1: Comparison of accuracy among various multi-
+teacher KD methods over CNNs on CIFAR-100. We use
+the pre-trained teacher pool to distill student networks. The
+bold and underline numbers denotes the best and second-
+best results for each student. Experiments perform 3 runs.
+and MMKD, generally outperform the A VER version, in-
+dicating that dynamic sample-wise weights in a data-driven
+manner are better than simple static weights. Our MTKD-
+RL achieves the best performance and surpasses the state-of-
+the-art CA-MKD and MMKD methods with average gains
+of 0.31% and 0.33%, respectively. The results demonstrate
+that our proposed reinforcement learning framework is bet-
+ter than the entropy-based and meta-learning-based mecha-
+nisms for multi-teacher weight optimization.
+Experiments on ImageNet. As shown in Table 2, we
+conduct multi-teacher KD experiments over CNNs on Im-
+ageNet. MTKD-RL enhances the baseline by 2.47% and
+3.13% accuracy gains on ResNet-18 and ResNet-34, respec-
+tively. It outperforms the A VER (KD+FitNet) with an aver-
+age gain of 1.24%, manifesting that our method generates
+meaningful multi-teacher weights on large-scale ImageNet.
+Compared to state-of-the-art MMKD, MTKD-RL achieves
+0.49% and 0.71% accuracy improvements on ResNet-18 and
+ResNet-34, respectively. The results show the superiority
+
+===== PAGE 6 =====
+Network Params FLOPs Method Acc@1
+Teacher pool
+ResNet-50 25.6M 4.1G
+Pretrained
+76.13
+ResNet-101 44.5M 7.8G 77.37
+Wide ResNet-50-2 68.9M 11.4G 78.47
+ResNeXt-50 (32×4d) 25.0M 4.2G 77.62
+Student
+ResNet-18 11.7M 1.8G
+Baseline 70.35
+A VER (KD) 71.52
+A VER (KD+FitNet) 71.56
+AMTML-KD 71.89
+AEKD 71.67
+CA-MKD 72.38
+MMKD 72.33
+MTKD-RL (Ours) 72.82
+ResNet-34 21.8M 3.7G
+Baseline 73.64
+A VER (KD) 75.32
+A VER (KD+FitNet) 75.55
+AMTML-KD 75.68
+AEKD 75.66
+CA-MKD 75.87
+MMKD 76.06
+MTKD-RL (Ours) 76.77
+Table 2: Comparison of accuracy among various multi-
+teacher KD methods over CNNs on ImageNet.
+Network Params FLOPs Method Acc@1
+Teacher pool
+CaiT-S24 46.9M 9.4G
+Pretrained
+83.36
+DeiT-Small 22.1M 4.6G 79.82
+DeiT-Base 86.6M 17.5G 81.80
+Student
+DeiT-Tiny 5.7M 1.3G
+Baseline 72.23
+A VER (KD) 73.87
+A VER (KD+FitNet) 73.98
+AMTML-KD 73.68
+AEKD 73.72
+CA-MKD 74.12
+MMKD 74.35
+MTKD-RL (Ours) 75.14
+CaiT-XXS24 12.0M 2.5G
+Baseline 77.32
+A VER 78.36
+A VER (KD+FitNet) 78.27
+AMTML-KD 78.57
+AEKD 78.44
+CA-MKD 78.65
+MMKD 78.42
+MTKD-RL (Ours) 79.22
+Table 3: Comparison of accuracy among various multi-
+teacher KD methods over ViT on ImageNet.
+of MTKD-RL for applying to the large-scale dataset com-
+pared to other multi-teacher KD strategies. As shown in
+Table 2, we further conduct multi-teacher KD experiments
+over ViTs. MTKD-RL increases the baseline by 2.91% and
+1.90% on DeiT-Tiny and CaiT-XXS24, respectively. It also
+exceeds the best competitor MMKD by an average gain of
+0.80% on the two networks. The results reveal that MTKD-
+RL can also work well on ViT.
+Backbone Detector Method mAP
+ResNet-18
+Mask-RCNN Baseline 34.1MTKD-RL (Ours) 35.1
+Cascade-RCNN Baseline 36.5MTKD-RL (Ours) 37.7
+RetinaNet Baseline 31.6MTKD-RL (Ours) 32.7
+Faster-RCNN Baseline 33.5MTKD-RL (Ours) 34.7
+ResNet-34
+Mask-RCNN Baseline 37.6MTKD-RL (Ours) 39.0
+Cascade-RCNN Baseline 39.6MTKD-RL (Ours) 40.8
+RetinaNet Baseline 35.2MTKD-RL (Ours) 36.9
+Faster-RCNN Baseline 37.0MTKD-RL (Ours) 38.5
+Table 4: Comparison of downstream object detection based
+on ImageNet-pretrained ResNet backbones over various de-
+tectors on COCO-2017.
+Segmentor Method Cityscapes ADE20K COCO-Stuff
+DeepLabV3 Baseline 76.34 36.08 29.97MTKD-RL (Ours) 77.42 37.07 31.82
+PSPNet Baseline 74.60 36.84 31.25MTKD-RL (Ours) 75.89 37.78 32.39
+Table 5: Comparison of downstream semantic segmenta-
+tion tasks based on an ImageNet-pretrained ResNet-34 on
+Cityscapes, ADE20K and COCO-Stuff-164K.
+Experimental Results on Object Detection
+As shown in Table 4, we transfer ImageNet-pretrained
+ResNet backbones for downstream object detection on
+COCO-2017. The ResNet backbones pretrained by our
+MTKD-RL obtain consistent performance improvements
+over various detectors (Mask-RCNN (He et al. 2017),
+Cascade-RCNN (Cai and Vasconcelos 2018), Reti-
+naNet (Lin et al. 2017) and Faster-RCNN (Ren et al. 2016))
+than the baseline backbones. MTKD-RL outperforms the
+baseline with 1.1% and 1.5% mAP gains on average for
+ResNet-18 and ResNet-34, respectively. The results indicate
+that MTKD-RL can guide the network to learn better feature
+representations for downstream object detection.
+Experimental Results on Semantic Segmentation
+As shown in Table 5, we transfer the ImageNet-pretrained
+ResNet-34 backbone for downstream semantic segmen-
+tation datasets. Our MTKD-RL consistently surpasses
+the baseline across various datasets by equipping with
+DeepLabV3 (Chen et al. 2018) and PSPNet (Zhao et al.
+2017) segmentation heads. The average improvements are
+1.19%, 0.97% and 1.50% on Cityscapes, ADE20K and
+COCO-Stuff-164K datasets, respectively. The results show
+
+===== PAGE 7 =====
+0.5 1.0 1.5 2.072
+74
+76
+78
+80Accuracy (%) on CIFAR-100
+Logit KD loss weight 
+Logit weight 
+1 2 5 10
+Feature KD loss weight 
+Feature weight 
+Loss term ablation
+Baseline
+Logit KD
+Feature KD
+Both
+1 2 3 4 5
+Number of teacher networks M
+Teacher Number M
+Figure 2: Parameter analyses and ablation study over ShuffleNetV2 on CIFAR-100.
+RL methods Acc
+PG 78.39±0.14
+DPG 78.16±0.11
+DDPG 78.05±0.22
+PPO 78.28±0.08
+(a) RL methods
+Component Acc
+A VER 76.83±0.34
+f Tmi ∥ zTmi ∥ LTmCE 77.84±0.17
+cos ∥ DKL 77.46±0.21
+All 78.39±0.14
+(b) Component analysis
+Method Time Mem Acc
+Baseline 29s 2.3G 72.84±0.15
+A VER 41s 2.8G 76.83±0.34
+CA-MKD 54s 2.9G 78.09±0.17
+MTKD-RL 47s 3.2G 78.39±0.14
+(c) Training costs
+Table 6: Analysis of MTKD-RL over ShuffleNetV2 on CIFAR-100.
+that the backbone pretrained by MTKD-RL can be well ex-
+tended to semantic segmentation tasks and generate better
+pixel-wise feature representations.
+Ablation Study and Parameter Analysis
+Ablation study of various RL methods. As shown in
+Table 6(a), we investigate various RL methods for multi-
+teacher weight optimization. We find that MTKD-RL is not
+sensitive to RL optimization methods. Therefore, we use the
+original PG due to its simplicity and effectiveness.
+Component analysis for RL-based optimization.In Ta-
+ble 6(b), we analyse various components to construct state
+and action information. Using the teacher performance, in-
+cluding feature f Tmi , logit zTmi , and cross-entropy loss
+LTmCE , leads to 1.01% gain over A VER. Using the teacher-
+student gaps, including feature similarity cos(r(f Si ), f Tmi )
+and logit KL-divergence DKL (ySi , yTmi ), results in 0.63%
+gain. Gathering the comprehensive knowledge of teacher
+performance and teacher-student gaps for RL-based opti-
+mization achieves the best 1.56% improvement.
+Training costs. As shown in Table 6(c), we compare
+training complexity in one epoch with other methods over
+NVIDIA RTX 4090. Compared to the A VER without multi-
+teacher weight optimization, MTKD-RL needs extra 15%
+time and 14% memory costs, because our method requires
+agent training and storing (state, action, reward) as episode
+history. In contrast to state-of-the-art CA-MKD, MTKD-RL
+uses 13% less time and extra 10% memory footprint but
+achieves a better accuracy gain. In summary, our method
+leads to significant performance improvements with little in-
+crease in training complexity.
+Parameter analyses of loss weights. As shown in Fig.2,
+we investigate the impact of logit loss weight α and feature
+Method Baseline MTKD-RL +DIST +ND
+Acc@1 70.35 72.82 73.29 73.61
+Table 7: Combined with single-teacher KD methods to distill
+ResNet-18 on ImageNet.
+loss weight β, where α = 1 and β = 5 achieve the best
+performance.
+Impact of the number of teacher networks.Fig.2 shows
+the performance curve caused by the number of teacher net-
+works M. As the teacher number M increases, the perfor-
+mance generally improves, since more teachers could pro-
+vide richer ensemble knowledge but saturates at a certain
+capacity of M = 4.
+Ablation study of loss terms.As shown in Fig.2, we con-
+duct an ablation study of loss terms in MTKD-RL. Com-
+pared to the baseline without distillation, logit-level and
+feature-level KD lead to 4.14% and 3.61% accuracy im-
+provements, respectively. One of the reasons may be that
+logit-level KD is architecture-unaware distillation and more
+robust than feature-level KD. Summarizing the logit-level
+and feature-level KD provides comprehensive information
+for the student, maximizing the accuracy gain by 5.55%.
+Combined with single-teacher KD. In Table 7, Combin-
+ing MTKD-RL with advanced single-teacher KD methods
+of DIST (Huang et al. 2022) and ND (Wang et al. 2025) fur-
+ther achieves 0.47% and 0.79% accuracy gains, respectively.
+Conclusion
+This paper proposes MTKD-RL, formulating multi-teacher
+KD as an RL-based decision process. Compared to existing
+works, our method uses more comprehensive teacher per-
+
+===== PAGE 8 =====
+formance and teacher-student gaps to construct the input
+evidence. It reinforces the interaction between teacher and
+student by an agent. Experimental results on visual recog-
+nition tasks show that MTKD-RL achieves state-of-the-art
+performance among existing multi-teacher KD methods. We
+hope our work could inspire future research to explore more
+advanced RL strategies for multi-teacher KD.
+A.1 Methodology
+Action Construction
+For easy implementation, we integrate multiple agents into a
+single agent for action construction. The agent has a gener-
+ator to optimize multi-teacher distillation weights. The gen-
+erator sequentially includes a linear layer, a ReLU activa-
+tion function and two separated linear layers finished by the
+softmax function to output the feature-level and logit-level
+multi-teacher distillation weight vectors wgenf ∈ RM and
+wgenl ∈ RM , respectively. We also combine the confidence-and divergence-aware weight generation strategies in the ac-
+tion space. The confidence-aware weight generation strategy
+is inspired by CA-MKD (Zhang, Chen, and Wang 2022),
+where the m-th teacher distillation weight wconfm is formu-
+lated as:
+wconfm = 1K − 1 (1 − exp(LCEm )PMj=1 exp(LCEj ) ). (9)
+The confidence-aware multi-teacher distillation weight dis-
+tribution is formulated as:
+wconf = [wconf1 , wconf2 , · · ·, wconfM ] ∈ RM (10)
+For the divergence-aware weight generation strategy, we
+adopt teacher-student feature similarity (formulated as
+Equ.(3)) and probability KL-divergence (formulated as
+Equ.(4)) with softmax normalization to compute multi-
+teacher weights. Specifically, the feature-level multi-teacher
+weight distribution wdivf ∈ RM derived from the teacher-
+student feature similarity is formulated as:
+wdivf = sof tmax([cosT1 , cosT2 , · · ·, cosTM ]). (11)
+Here, we assign a larger weight to the teacher who has a
+larger feature similarity with the student. This is because the
+more similar teacher-student pair means a smaller semantic
+gap and the teacher could provide matched semantic infor-
+mation to the student. The logit-level multi-teacher weight
+distribution wdivl ∈ RM derived from the probability KL-
+divergence is formulated as:
+wdivl = sof tmax([KL T1 , KLT2 , · · ·, KLTM ]). (12)
+Here, we assign a larger weight to that teacher who has a
+larger probability KL-divergence. All teachers in the pool
+are often more superior than the student, and produce higher-
+quality class probability distributions. Therefore, we guide
+the student to learn all teachers’ final outputs, and empha-
+size the distillation strength to that teacher who is not well-
+aligned with the student.
+The feature-level multi-teacher distillation weight distri-
+bution wf is formulated as a weighted fusion from three
+types of weight vectors:
+wf = γgenf ∗ wgenf + γconff ∗ wconf + γdivf ∗ wdivf . (13)
+The logit-level multi-teacher distillation weight distribution
+wl is formulated as a weighted fusion from three types of
+weight vectors:
+wl = γgenl ∗ wgenl + γconfl ∗ wconf + γdivl ∗ wdivl . (14)
+Here, γgenf , γconff , γdivf , γgenl , γconfl . γdivl are balancing pa-
+rameters, which can be constant or learnable. In practice,
+we found that simply using equal balancing parameters, i.e.,
+γgenf = γconff = γdivf = 13, γgenl = γconfl = γdivl = 13,
+works well. More detailed tuning of balancing parameters
+may achieve better performance. Moreover, we can also re-
+gard them as learnable parameters, and we found the overall
+performance improvements are similar to the constant pa-
+rameters. More sophisticated algorithms to optimize learn-
+able parameters may further facilitate the multi-teacher dis-
+tillation performance.
+A.2 Training Details
+Image Classification
+• CIFAR-100. We adopt the standard image pre-
+processing pipeline (He et al. 2016), i.e. random crop-
+ping and flipping. The resolution of each input image is
+32×32 after pre-processing. We apply Stochastic Gradi-
+ent Descent (SGD) optimizer to train the network, where
+the momentum is 0.9, the weight decay is 1 × 10−4, the
+batch size is 64, and the initial learning rate is 0.05. The
+learning rate is multiplied by 10 after the 100-th and 150-
+th epoch within the total 240 epochs. Training is con-
+ducted on a single NVIDIA 4090 GPU. Experiments are
+implemented by Pytorch framework (Paszke et al. 2019).
+• ImageNet. We adopt the standard image pre-processing
+pipeline (He et al. 2016), i.e. random cropping and flip-
+ping. The resolution of each input image is 224×224 af-
+ter pre-processing. For CNN and ViT, we conduct differ-
+ent training setups:
+(1) CNN. We apply SGD optimizer to train the net-
+work, where the momentum is 0.9, the weight decay is
+1 × 10−4, the batch size is 256, and the initial learning
+rate is 0.1. The learning rate is multiplied by 10 after the
+30-th, 60-th ,and 90-th epoch within the total 100 epochs.
+(2) ViT. We apply AdamW optimizer to train the net-
+work, where the weight decay is 0.05, the batch size is
+1024, and the initial learning rate is 0.001. The detailed
+training setup follows DeiT (Touvron et al. 2021a).
+Training is conducted on 8 NVIDIA A800 GPUs. Exper-
+iments are implemented by Pytorch framework (Paszke
+et al. 2019).
+Object Detection
+COCO-2017. We adopt the default data pre-processing of
+MMDetection (Chen et al. 2019). The shorter side of the
+
+===== PAGE 9 =====
+input image is resized to 800 pixels, the longer side is lim-
+ited to 1333 pixels. We adopt a 2x training schedule with
+24 epochs. Training is conducted on 8 NVIDIA A800 GPUs
+using synchronized SGD with a batch size of 1 per GPU.
+Semantic Segmentation
+Cityscapes. We adopt the standard image pre-processing
+pipeline (Yang et al. 2022c), i.e., random flipping and scal-
+ing in the range of [0.5, 2]. We apply SGD optimizer to train
+the segmentation network, where the momentum is 0.9, the
+batch size is 8, and the initial learning rate is 0.1. The learn-
+ing rate is decayed by (1 − itertotal iter )0.9 following the poly-nomial annealing policy (Chen et al. 2017) within the total
+80K training iterations. Training is conducted on 8 NVIDIA
+A800 GPUs using synchronized SGD with a batch size of 1
+per GPU. Experiments are implemented by Pytorch frame-
+work (Paszke et al. 2019).
+Acknowledgments
+This work is partially supported by the National Nat-
+ural Science Foundation of China (No.62476264 and
+No.62406312), China National Postdoctoral Program for In-
+novative Talents (No.BX20240385) funded by China Post-
+doctoral Science Foundation, Beijing Natural Science Foun-
+dation (No.4244098), and Science Foundation of the Chi-
+nese Academy of Sciences.
+References
+Caesar, H.; Uijlings, J.; and Ferrari, V . 2018. Coco-stuff:
+Thing and stuff classes in context. In CVPR, 1209–1218.
+Cai, Z.; and Vasconcelos, N. 2018. Cascade r-cnn: Delving
+into high quality object detection. In CVPR, 6154–6162.
+Cao, S.; Li, M.; Hays, J.; Ramanan, D.; Wang, Y .-X.; and
+Gui, L. 2023. Learning lightweight object detectors via
+multi-teacher progressive distillation. In International Con-
+ference on Machine Learning, 3577–3598. PMLR.
+Chen, K.; Wang, J.; Pang, J.; Cao, Y .; Xiong, Y .; Li, X.;
+Sun, S.; Feng, W.; Liu, Z.; Xu, J.; et al. 2019. MMDetec-
+tion: Open mmlab detection toolbox and benchmark. arXiv
+preprint arXiv:1906.07155.
+Chen, L.-C.; Papandreou, G.; Schroff, F.; and Adam, H.
+2017. Rethinking atrous convolution for semantic image
+segmentation. arXiv preprint arXiv:1706.05587.
+Chen, L.-C.; Zhu, Y .; Papandreou, G.; Schroff, F.; and
+Adam, H. 2018. Encoder-decoder with atrous separable con-
+volution for semantic image segmentation. In ECCV, 801–
+818.
+Chengqing, Y .; Guangxi, Y .; Chengming, Y .; Yu, Z.; and Xi-
+wei, M. 2023. A multi-factor driven spatiotemporal wind
+power prediction model based on ensemble deep graph
+attention reinforcement learning networks. Energy, 263:
+126034.
+Cho, J. H.; and Hariharan, B. 2019. On the efficacy of
+knowledge distillation. In Proceedings of the IEEE/CVF in-
+ternational conference on computer vision, 4794–4802.
+Cordts, M.; Omran, M.; Ramos, S.; Rehfeld, T.; Enzweiler,
+M.; Benenson, R.; Franke, U.; Roth, S.; and Schiele, B.
+2016. The cityscapes dataset for semantic urban scene un-
+derstanding. In Proceedings of the IEEE conference on com-
+puter vision and pattern recognition, 3213–3223.
+Deng, J.; Dong, W.; Socher, R.; Li, L.-J.; Li, K.; and Fei-
+Fei, L. 2009. Imagenet: A large-scale hierarchical image
+database. In IEEE conference on computer vision and pat-
+tern recognition, 248–255. IEEE.
+Du, S.; You, S.; Li, X.; Wu, J.; Wang, F.; Qian, C.; and
+Zhang, C. 2020. Agree to disagree: Adaptive ensemble
+knowledge distillation in gradient space. advances in neural
+information processing systems, 33: 12345–12355.
+Feng, W.; Yang, C.; An, Z.; Huang, L.; Diao, B.; Wang, F.;
+and Xu, Y . 2024. Relational diffusion distillation for effi-
+cient image generation. In Proceedings of the 32nd ACM
+International Conference on Multimedia, 205–213.
+Finn, C.; Abbeel, P.; and Levine, S. 2017. Model-agnostic
+meta-learning for fast adaptation of deep networks. In In-
+ternational conference on machine learning , 1126–1135.
+PMLR.
+He, K.; Gkioxari, G.; Doll´ar, P.; and Girshick, R. 2017. Mask
+r-cnn. In Proceedings of the IEEE international conference
+on computer vision, 2961–2969.
+He, K.; Zhang, X.; Ren, S.; and Sun, J. 2016. Deep resid-
+ual learning for image recognition. In Proceedings of the
+IEEE conference on computer vision and pattern recogni-
+tion, 770–778.
+Hinton, G.; Vinyals, O.; and Dean, J. 2015. Distill-
+ing the knowledge in a neural network. arXiv preprint
+arXiv:1503.02531.
+Huang, T.; You, S.; Wang, F.; Qian, C.; and Xu, C. 2022.
+Knowledge distillation from a stronger teacher. Advances in
+Neural Information Processing Systems, 35: 33716–33727.
+Kaelbling, L. P.; Littman, M. L.; and Moore, A. W. 1996.
+Reinforcement learning: A survey. Journal of artificial in-
+telligence research, 4: 237–285.
+Kang, J.; Chen, X.; Wang, J.; Hu, C.; Liu, X.; and Dudek, G.
+2022. MOBA: Multi-teacher Model Based Reinforcement
+Learning. openreview.net.
+Krizhevsky, A.; Hinton, G.; et al. 2009. Learning multiple
+layers of features from tiny images. Technical Report.
+Kwon, K.; Na, H.; Lee, H.; and Kim, N. S. 2020. Adaptive
+knowledge distillation based on entropy. In ICASSP 2020-
+2020 IEEE International Conference on Acoustics, Speech
+and Signal Processing (ICASSP), 7409–7413. IEEE.
+Li, L.; Bao, Y .; Dong, P.; Yang, C.; Li, A.; Luo, W.; Liu, Q.;
+Xue, W.; and Guo, Y . 2024. DetKDS: Knowledge Distilla-
+tion Search for Object Detectors. In Forty-first International
+Conference on Machine Learning.
+Liang, K.; Meng, L.; Liu, M.; Liu, Y .; Tu, W.; Wang, S.;
+Zhou, S.; Liu, X.; Sun, F.; and He, K. 2024a. A survey of
+knowledge graph reasoning on graph types: Static, dynamic,
+and multi-modal. IEEE Transactions on Pattern Analysis
+and Machine Intelligence.
+
+===== PAGE 10 =====
+Liang, K.; Meng, L.; Liu, Y .; Liu, M.; Wei, W.; Liu, S.; Tu,
+W.; Wang, S.; Zhou, S.; and Liu, X. 2024b. Simple Yet Ef-
+fective: Structure Guided Pre-trained Transformer for Multi-
+modal Knowledge Graph Reasoning. In Proceedings of the
+32nd ACM International Conference on Multimedia, 1554–
+1563.
+Lillicrap, T. P.; Hunt, J. J.; Pritzel, A.; Heess, N.; Erez, T.;
+Tassa, Y .; Silver, D.; and Wierstra, D. 2015. Continuous
+control with deep reinforcement learning. arXiv preprint
+arXiv:1509.02971.
+Lin, T.-Y .; Goyal, P.; Girshick, R.; He, K.; and Doll ´ar, P.
+2017. Focal loss for dense object detection. In Proceedings
+of the IEEE international conference on computer vision ,
+2980–2988.
+Lin, T.-Y .; Maire, M.; Belongie, S.; Hays, J.; Perona, P.; Ra-
+manan, D.; Doll ´ar, P.; and Zitnick, C. L. 2014. Microsoft
+coco: Common objects in context. In Computer Vision–
+ECCV 2014: 13th European Conference, Zurich, Switzer-
+land, September 6-12, 2014, Proceedings, Part V 13 , 740–
+755. Springer.
+Liu, H.; Yu, C.; Wu, H.; Duan, Z.; and Yan, G. 2020. A
+new hybrid ensemble deep reinforcement learning model for
+wind speed short term forecasting. Energy, 202: 117794.
+Liu, Y .; Zhang, W.; and Wang, J. 2020. Adaptive multi-
+teacher multi-level knowledge distillation.Neurocomputing,
+415: 106–113.
+Ma, N.; Zhang, X.; Zheng, H.-T.; and Sun, J. 2018. Shuf-
+flenet v2: Practical guidelines for efficient cnn architecture
+design. In Proceedings of the European conference on com-
+puter vision (ECCV), 116–131.
+Mnih, V .; Kavukcuoglu, K.; Silver, D.; Graves, A.;
+Antonoglou, I.; Wierstra, D.; and Riedmiller, M. 2013. Play-
+ing atari with deep reinforcement learning. arXiv preprint
+arXiv:1312.5602.
+Paszke, A.; Gross, S.; Massa, F.; Lerer, A.; Bradbury, J.;
+Chanan, G.; Killeen, T.; Lin, Z.; Gimelshein, N.; Antiga, L.;
+et al. 2019. Pytorch: An imperative style, high-performance
+deep learning library. Advances in neural information pro-
+cessing systems, 32.
+Radosavovic, I.; Kosaraju, R. P.; Girshick, R.; He, K.; and
+Doll´ar, P. 2020. Designing network design spaces. In Pro-
+ceedings of the IEEE/CVF conference on computer vision
+and pattern recognition, 10428–10436.
+Ren, S.; He, K.; Girshick, R.; and Sun, J. 2016. Faster R-
+CNN: Towards real-time object detection with region pro-
+posal networks. IEEE transactions on pattern analysis and
+machine intelligence, 39(6): 1137–1149.
+Romero, A.; Ballas, N.; Kahou, S. E.; Chassang, A.; Gatta,
+C.; and Bengio, Y . 2014. Fitnets: Hints for thin deep nets.
+arXiv preprint arXiv:1412.6550.
+Sandler, M.; Howard, A.; Zhu, M.; Zhmoginov, A.; and
+Chen, L.-C. 2018. Mobilenetv2: Inverted residuals and lin-
+ear bottlenecks. In Proceedings of the IEEE conference on
+computer vision and pattern recognition, 4510–4520.
+Schulman, J.; Wolski, F.; Dhariwal, P.; Radford, A.; and
+Klimov, O. 2017. Proximal policy optimization algorithms.
+arXiv preprint arXiv:1707.06347.
+Silver, D.; Lever, G.; Heess, N.; Degris, T.; Wierstra, D.;
+and Riedmiller, M. 2014. Deterministic policy gradient al-
+gorithms. In International conference on machine learning,
+387–395. Pmlr.
+Sutton, R. S.; McAllester, D.; Singh, S.; and Mansour, Y .
+1999. Policy gradient methods for reinforcement learning
+with function approximation. Advances in neural informa-
+tion processing systems, 12.
+Touvron, H.; Cord, M.; Douze, M.; Massa, F.; Sablayrolles,
+A.; and J´egou, H. 2021a. Training data-efficient image trans-
+formers & distillation through attention. In International
+conference on machine learning, 10347–10357. PMLR.
+Touvron, H.; Cord, M.; Sablayrolles, A.; Synnaeve, G.; and
+J´egou, H. 2021b. Going deeper with image transformers. In
+Proceedings of the IEEE/CVF international conference on
+computer vision, 32–42.
+Van Hasselt, H.; Guez, A.; and Silver, D. 2016. Deep rein-
+forcement learning with double q-learning. In Proceedings
+of the AAAI conference on artificial intelligence, volume 30.
+Wang, Y .; Cheng, L.; Duan, M.; Wang, Y .; Feng, Z.; and
+Kong, S. 2025. Improving Knowledge Distillation via Reg-
+ularizing Feature Direction and Norm. In European Confer-
+ence on Computer Vision, 20–37. Springer.
+Xie, S.; Girshick, R.; Doll´ar, P.; Tu, Z.; and He, K. 2017. Ag-
+gregated residual transformations for deep neural networks.
+In Proceedings of the IEEE conference on computer vision
+and pattern recognition, 1492–1500.
+Yang, C.; An, Z.; Cai, L.; and Xu, Y . 2021. Hierarchical
+self-supervised augmented knowledge distillation. In Inter-
+national Joint Conference on Artificial Intelligence , 1217–
+1223.
+Yang, C.; An, Z.; Cai, L.; and Xu, Y . 2022a. Knowledge
+distillation using hierarchical self-supervision augmented
+distribution. IEEE Transactions on Neural Networks and
+Learning Systems, 35(2): 2094–2108.
+Yang, C.; An, Z.; Huang, L.; Bi, J.; Yu, X.; Yang, H.; Diao,
+B.; and Xu, Y . 2024. CLIP-KD: An Empirical Study of
+CLIP Model Distillation. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition ,
+15952–15962.
+Yang, C.; An, Z.; Zhou, H.; Cai, L.; Zhi, X.; Wu, J.; Xu, Y .;
+and Zhang, Q. 2022b. Mixskd: Self-knowledge distillation
+from mixup for image recognition. In European Conference
+on Computer Vision, 534–551. Springer.
+Yang, C.; An, Z.; Zhou, H.; Zhuang, F.; Xu, Y .; and Zhang,
+Q. 2023a. Online knowledge distillation via mutual con-
+trastive learning for visual recognition. IEEE Transac-
+tions on Pattern Analysis and Machine Intelligence , 45(8):
+10212–10227.
+Yang, C.; An, Z.; Zhu, H.; Hu, X.; Zhang, K.; Xu, K.; Li,
+C.; and Xu, Y . 2020. Gated convolutional networks with
+hybrid connectivity for image classification. In Proceedings
+of the AAAI conference on artificial intelligence, volume 34,
+12581–12588.
+
+===== PAGE 11 =====
+Yang, C.; Yu, X.; An, Z.; and Xu, Y . 2023b. Categories
+of response-based, feature-based, and relation-based knowl-
+edge distillation. In Advancements in Knowledge Distilla-
+tion: Towards New Horizons of Intelligent Systems , 1–32.
+Springer.
+Yang, C.; Zhou, H.; An, Z.; Jiang, X.; Xu, Y .; and Zhang,
+Q. 2022c. Cross-image relational knowledge distillation for
+semantic segmentation. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition ,
+12319–12328.
+You, S.; Xu, C.; Xu, C.; and Tao, D. 2017. Learning from
+multiple teacher networks. In Proceedings of the 23rd ACM
+SIGKDD International Conference on Knowledge Discov-
+ery and Data Mining, 1285–1294.
+Yuan, F.; Shou, L.; Pei, J.; Lin, W.; Gong, M.; Fu, Y .;
+and Jiang, D. 2021. Reinforced multi-teacher selection for
+knowledge distillation. In Proceedings of the AAAI Confer-
+ence on Artificial Intelligence, volume 35, 14284–14291.
+Zagoruyko S, K. N. 2016. Wide residual networks. In Pro-
+ceedings of the British Machine Vision Conference.
+Zhang, H.; Chen, D.; and Wang, C. 2022. Confidence-aware
+multi-teacher knowledge distillation. In ICASSP 2022-2022
+IEEE International Conference on Acoustics, Speech and
+Signal Processing (ICASSP), 4498–4502. IEEE.
+Zhang, H.; Chen, D.; and Wang, C. 2023. Adaptive Multi-
+Teacher Knowledge Distillation with Meta-Learning. arXiv
+preprint arXiv:2306.06634.
+Zhang, T.; Xue, M.; Zhang, J.; Zhang, H.; Wang, Y .; Cheng,
+L.; Song, J.; and Song, M. 2023. Generalization Matters:
+Loss Minima Flattening via Parameter Hybridization for Ef-
+ficient Online Knowledge Distillation. In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, 20176–20185.
+Zhao, H.; Shi, J.; Qi, X.; Wang, X.; and Jia, J. 2017. Pyramid
+scene parsing network. In CVPR, 2881–2890.
+Zhou, B.; Zhao, H.; Puig, X.; Fidler, S.; Barriuso, A.; and
+Torralba, A. 2017. Scene parsing through ade20k dataset. In
+CVPR, 633–641.
