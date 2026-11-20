@@ -1,4 +1,4 @@
-# MTKD-RL 汇报速查提词
+# MTKD-RL 速查提词
 
 论文：Yang et al., *Multi-Teacher Knowledge Distillation with Reinforcement Learning for Visual Recognition*, arXiv:2502.18510v1, AAAI 2025。
 

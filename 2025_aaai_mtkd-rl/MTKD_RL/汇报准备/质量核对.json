@@ -1,0 +1,96 @@
+{
+  "date": "2026-11-20",
+  "formula_ids": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14
+  ],
+  "tables_covered": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "speech_sections": 16,
+  "speech_cjk_characters_including_headings": 7735,
+  "estimated_minutes_at_260_to_300_cjk_per_min": [
+    25.8,
+    29.8
+  ],
+  "simulation_run": "passed; see 模拟张量运行结果.json",
+  "original_module_run": "passed; see 原始模块追踪结果.json",
+  "source_commit": "4e2b62adb2bab0d3fde4118e19c4ac2fb8006991",
+  "original_source_files_verified": [
+    {
+      "path": "requirements.txt",
+      "sha256": "633f4f54d9387b8d67ae9090e0c782eee21b816afc9a0c4f5e8ecea70bf6663d"
+    },
+    {
+      "path": "train_loops.py",
+      "sha256": "3720f3921cd36ae3a45cc5eae4f28590b44926954bb8903d25cbc2ea61446812"
+    },
+    {
+      "path": "train_student_rl.py",
+      "sha256": "15ec4833a2adf32c387b94dae8658c1f4a95c575ced8903b5295a634b9b9af08"
+    },
+    {
+      "path": "README.md",
+      "sha256": "bcfe83fdcd9f0d18df8a5c0cc6603fc0e78b2b8a19bfd0a4f3f510919b017d5b"
+    },
+    {
+      "path": "utils.py",
+      "sha256": "3e5cf38bd1f56fbe8a889c727b517533527c197ddc5f0e78bd59ffbbf221de7c"
+    },
+    {
+      "path": "distiller_zoo/feature_mse_mtkd_rl.py",
+      "sha256": "f5a8eb28b9f49c7e8040c7bea24d27ddc237ec93d01c528cc915183f5d488d04"
+    },
+    {
+      "path": "distiller_zoo/__init__.py",
+      "sha256": "9235cd71de93ffc8ce63ab0bd0bde01d27e59aa291b6c7f3046ff6c2f4263eed"
+    },
+    {
+      "path": "dataset/cifar100.py",
+      "sha256": "aba47621aea6c5e6da65ab437f9251a746eb693dc274b23a749de0b151c8daf8"
+    },
+    {
+      "path": "models/ShuffleNetv2.py",
+      "sha256": "c81507f2a2f8df4fe51150e24c8510c72a2e352b3134818edc6b747e8a572210"
+    },
+    {
+      "path": "models/regnet.py",
+      "sha256": "ad1f2b26e70493c1dbe80e3686a8fadb8b44064a0a4a5e21246f88f43ee463bb"
+    },
+    {
+      "path": "models/util.py",
+      "sha256": "2c20d416da9b18c612c2409398a0f13632fe90f204977cc3df7220d9d6a96529"
+    },
+    {
+      "path": "models/policy.py",
+      "sha256": "093c3565abbc8c7a28df80f938d2d38be0f8a0e76e2180bbdc177003917e7ec3"
+    },
+    {
+      "path": "models/wrn.py",
+      "sha256": "d06a6a3a2ed7a73492e3e303a641477e12dcdca3d2371e651e0d205901b10baf"
+    },
+    {
+      "path": "models/resnet.py",
+      "sha256": "b109c25b7066234fe03d80a1beb98202b063494b0b8ad2d8ed315aa618535c0f"
+    }
+  ],
+  "scope": "Structure, source identity, tensor shapes, gradients and synthetic numerical checks only; no model accuracy reproduction."
+}

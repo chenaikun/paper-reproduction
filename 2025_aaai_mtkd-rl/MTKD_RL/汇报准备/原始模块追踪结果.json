@@ -1,0 +1,227 @@
+{
+  "commit": "4e2b62adb2bab0d3fde4118e19c4ac2fb8006991",
+  "torch_version": "2.6.0",
+  "boundary": "CPU B=2; random inputs and random model weights; selected original modules only; no accuracy reproduction",
+  "inputs": [
+    2,
+    3,
+    32,
+    32
+  ],
+  "targets": [
+    2
+  ],
+  "student_feature_list": [
+    [
+      2,
+      24,
+      32,
+      32
+    ],
+    [
+      2,
+      116,
+      16,
+      16
+    ],
+    [
+      2,
+      232,
+      8,
+      8
+    ],
+    [
+      2,
+      1024,
+      4,
+      4
+    ],
+    [
+      2,
+      1024
+    ]
+  ],
+  "student_logits": [
+    2,
+    100
+  ],
+  "teacher_feature_maps": [
+    [
+      2,
+      384,
+      8,
+      8
+    ],
+    [
+      2,
+      384,
+      8,
+      8
+    ],
+    [
+      2,
+      256,
+      8,
+      8
+    ],
+    [
+      2,
+      256,
+      8,
+      8
+    ]
+  ],
+  "teacher_embeddings": [
+    [
+      2,
+      384
+    ],
+    [
+      2,
+      384
+    ],
+    [
+      2,
+      256
+    ],
+    [
+      2,
+      256
+    ]
+  ],
+  "teacher_logits": [
+    [
+      2,
+      100
+    ],
+    [
+      2,
+      100
+    ],
+    [
+      2,
+      100
+    ],
+    [
+      2,
+      100
+    ]
+  ],
+  "trans_student_features": [
+    [
+      2,
+      384,
+      8,
+      8
+    ],
+    [
+      2,
+      384,
+      8,
+      8
+    ],
+    [
+      2,
+      256,
+      8,
+      8
+    ],
+    [
+      2,
+      256,
+      8,
+      8
+    ]
+  ],
+  "teacher_info_widths": [
+    487,
+    487,
+    359,
+    359
+  ],
+  "teacher_info_shapes": [
+    [
+      2,
+      487
+    ],
+    [
+      2,
+      487
+    ],
+    [
+      2,
+      359
+    ],
+    [
+      2,
+      359
+    ]
+  ],
+  "state_other_shapes": [
+    [
+      2,
+      4
+    ],
+    [
+      2,
+      4
+    ],
+    [
+      2,
+      4
+    ]
+  ],
+  "concatenated_input_width": 1692,
+  "hidden_width": 128,
+  "logit_actions": [
+    2,
+    4
+  ],
+  "feature_actions": [
+    2,
+    4
+  ],
+  "action_row_sums": [
+    0.9999999403953552,
+    1.0
+  ],
+  "ce_shape": [
+    2
+  ],
+  "kd_matrix_shape": [
+    2,
+    4
+  ],
+  "mse_matrix_shape": [
+    2,
+    4
+  ],
+  "total_loss_shape": [],
+  "reward_shape": [
+    2
+  ],
+  "normalized_reward_shape": [
+    2
+  ],
+  "student_phase_gradients": {
+    "student_has_grad": true,
+    "aligner_has_grad": true,
+    "agent_has_grad": false,
+    "teacher_has_grad": false
+  },
+  "agent_phase_gradients": {
+    "student_has_grad": false,
+    "aligner_has_grad": false,
+    "agent_has_grad": true,
+    "teacher_has_grad": false
+  },
+  "random_total_loss": 521.995849609375,
+  "random_raw_reward": [
+    -515.4412841796875,
+    -528.5504760742188
+  ],
+  "random_normalized_reward": [
+    0.707103431224823,
+    0.0
+  ]
+}

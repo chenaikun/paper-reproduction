@@ -1,0 +1,6 @@
+{
+  "upstream": "https://github.com/winycg/MTKD-RL",
+  "commit": "4e2b62adb2bab0d3fde4118e19c4ac2fb8006991",
+  "checked_date": "2026-11-20",
+  "scope": "selected files for tensor audit; not a complete training checkout"
+}
